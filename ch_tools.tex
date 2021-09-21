@@ -644,8 +644,8 @@ HP-UX~提供了自己的抓包工具~\emph{nettl}\index{nettl}。
 
 开始抓包：
 \begin{lstlisting}
-# nettl -tn all -e all -maxtrace 99999 -f /tmp/tixiang
-# nettl -tn loopback -e ns_ls_tcp -maxtrace 99999 -f /tmp/tixiang
+# nettl -tn all -e all -maxtrace 99999 -f /tmp/tix
+# nettl -tn loopback -e ns_ls_tcp -maxtrace 99999 -f /tmp/tix
 # nettl -tn pduin pduout -e ns_ls_loopback -tm 100000 -f /tmp/local
 # nettl -tn pduin pduout -e ns_ls_loopback -m 56 -tm 100000 -f /tmp/local
 # nettl -tn pduin -e ns_ls_loopback -m 56 -tm 100000 -f /tmp/local
@@ -665,7 +665,7 @@ ns_ls_icmp
 
 -tm maxsize 每个文件的最大大小，如果超过此大小，会使用下一个抓包文件。单位：KB。有效值：100~99999
 
-抓包的输出文件为 /tmp/tixiang.xxxx，使用 ls -l /tmp/tixiang.* 来检查
+抓包的输出文件为 /tmp/tix.xxxx，使用 ls -l /tmp/tix.* 来检查
 
 说明：
 在 ns\_ls\_loopback 上抓包如果指定了pduin 和 pduout 每个包会抓到2份，因为一进一出就是两份。
