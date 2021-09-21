@@ -1,0 +1,78 @@
+% -*- coding: utf-8 -*-
+
+\chapter{信号}
+
+
+\section{僵尸（Zombie）进程}
+
+\subsection{僵尸进程产生的原因}
+
+在~fork~产生子进程后，当子进程先于父进程退出时，
+虽然内核会释放它的内存和其它相关的资源，
+但为了要父进程获取子进程的退出状态，
+内核会保留这个已退出进程的相关信息，
+典型的信息会包括子进程的退出状态，
+子进程的累积的CPU占有时间。
+这些信息会在父进程调用wait或waitpid的时候返回给父进程。
+在子进程退出后，但父进程还没有调用wait或waitpid的这段时间里，
+这个已经退出的子进程成为\emph{僵尸（Zombie）进程}\index{Zombie}\index{僵尸进程}。
+
+进程退出时，它的父进程会收到一个SIGCHLD信号。
+一般情况下，这个信号的句柄通常执行wait系统调用，
+这样处于僵死状态的进程会被删除。
+如果父进程没有这么做，子进程会一直处于僵尸状态。
+实际上，僵尸进程不会对系统有大的危害，顶多就是它占用一个pid，
+看起来''碍眼''。
+
+\subsection{如何杀掉僵尸进程}
+
+僵尸进程的状态在Linux/HP-UX中被标识了Z。在top命令的S列如果有进程显示为Z，则表示该进程是僵尸进程。
+
+在Linux中，僵尸进程会被标识成~[defunct]，可以用下面的命令查找系统中的僵尸进程：
+\begin{lstlisting}
+ps -ef | grep defunct
+\end{lstlisting}
+
+你会发现使用kill命令（即使你使用-KILL参数也是没有用）
+是不能杀死这种进程的\footnote{僵尸怎么可能被杀死呢？}。
+原因是它已经退出了，什么也没有了，自然无法收到任何信号。
+
+既然知道僵尸进程产生原因，杀掉僵尸\footnote{杀掉这种说法并不准确，
+因为僵尸进程本身已经结束了。这里的“杀掉”只是指把僵尸进程从进程表里删除掉。}
+的思路就是让它的父进程执行\code{wait}或\code{waitpid}调用来处理~SIGCHLD~信号。
+有两种方法可以做到这一点：
+
+\begin{enumerate}
+\item 一种方法是改变僵尸进程的父进程。
+用kill命令杀死它的父进程，这样init变成它的新的父进程，
+而init会定时地执行wait系统调用。
+
+\item 另一种方式是使用调试器，在父进程中执行\code{wait}系统调用。
+调用~GDB~执行如下命令： 
+\begin{lstlisting}
+gdb parent-progname parent-pid
+(gdb) set unwindonsignal on 
+(gdb) call wait(pid-of-zombie-process) 
+\end{lstlisting}
+
+gdb会在父进程中调用wait，从而达到我们的目的。
+注意，unwindonsignal\index{gdb!unwindonsignal}要被set为on, 
+它告诉gdb把堆栈恢复到调用\code{wait}之前的状态。
+要不然父进程会crash。 
+
+\end{enumerate}
+
+\subsection{如何编程避免僵尸进程的产生}
+在程序中避免僵尸进程除了显式调用\code{wait}或\code{waitpid}外，
+也可以使用下面的代码忽略~SIGCHLD~信号来避免僵尸进程，
+使用这种方法不好的一个方面就是父进程不再能够获得子进程的退出状态了。
+
+\begin{lstlisting}
+   struct sigaction sa; 
+   sa.sa_handler = SIG_IGN; 
+   sa.sa_flags = SA_NOCLDWAIT; 
+   sigemptyset (&sa.sa_mask); 
+   sigaction (SIGCHLD, &sa, NULL); 
+\end{lstlisting}
+
+参考exit(2)手册页。 

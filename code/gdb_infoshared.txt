@@ -1,0 +1,22 @@
+$ gdb ust ust-3124.core
+(gdb) info shared
+From       To         Syms Read Shared Object Library
+0x4001e44c 0x40026e80 Yes       /rlib/libpthread.so.0
+0x4004d9a0 0x4006adac Yes       /usr/lib/libstdc++-libc6.2-2.so.3
+0x4007faa0 0x400966b4 Yes       /rlib/libm.so.6
+0x400ba590 0x40197bb4 Yes       /rlib/libc.so.6
+0x40001fe0 0x40013808 Yes       /lib/ld-linux.so.2
+0x401fa454 0x40200310 Yes       /lib/libnss_files.so.2
+0x40203010 0x40204c50 Yes       /lib/libnss_dns.so.2
+0x40208c48 0x40212480 Yes       /lib/libresolv.so.2
+(gdb) quit
+$ cd /
+$ tar czf ust_solibs_orig.tar.gz
+rlib/libpthread.so.0
+        /usr/lib/libstdc++-libc6.2-2.so.3 
+    /rlib/libm.so.6     
+    /rlib/libc.so.6     
+    /lib/ld-linux.so.2     
+    /lib/libnss_files.so.2    
+    /lib/libnss_dns.so.2    
+    /lib/libresolv.so.2

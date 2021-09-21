@@ -1,0 +1,390 @@
+%# -*- coding: utf-8 -*-
+
+\chapter{Core dump的调试}
+\label{ch:coredump}
+
+\section{产生coredump的原因}
+
+core dump\index{coredump}分为主动产生和被动产生的，
+比如主动调用\code{abort()}命令就会主动产生coredump。
+
+另一种产生~core dump~的原因是程序收到了一下信号\index{信号}会产生core dump。
+会产生~core dump~的信号\footnote{关于信号的更多信息参见man 7 signal。}见表~\ref{sec:tab_core_signals}~所示。
+
+\begin{table}[!hbp]
+\caption{产生core dump的信号列表} \label{sec:tab_core_signals}
+\begin{tabular}{l|c|l}
+\hline
+信号名 & 信号值 & 信号描述 \\
+\hline
+SIGQUIT &    3	&	Quit from keyboard \\
+SIGILL  &    4	&	Illegal Instruction \\
+SIGABRT &    6	&	Abort signal from abort(3) \\
+SIGFPE  &    8	&	Floating point exception \\
+SIGSEGV &    11	&	Invalid memory reference \\
+SIGBUS  &    10,7,10 &	Bus error (bad memory access) \\
+SIGSYS  &    12,-,12 &	Bad argument to routine (SVID) \\
+SIGTRAP &    5	&	Trace/breakpoint trap \\
+SIGXCPU &    24,24,30 & CPU time limit exceeded (4.2 BSD) \\
+SIGXFSZ &    25,25,31 & File size limit exceeded (4.2 BSD) \\
+SIGIOT  &    6	&	IOT trap. A synonym for SIGABRT \\
+\hline
+\end{tabular}
+\end{table}
+
+某些信号的\emph{信号值}这一列对应有三个值，因为信号是平台相关的，
+在不同的平台上有不同的值。第一个是alpha和sparc平台定义的该信号的值，
+第二个是i386，ppc和sh平台定义的该信号的值，
+第三个值是mips平台定义该信号的值。
+如果是-表示该平台没有实现该信号。
+
+\section{Linux下core dump的配置}
+\subsection{控制是否产生core dump}
+在Linux下是否产生从core dump文件以及对产生的core dump的大小限制是可配置的，
+在Bash/sh/ksh下可以使用ulimit\footnote{csh的命令是limit。}\index{ulimit}命令来查看该设置：\\
+\begin{lstlisting}
+$ ulimit -c
+1000000
+\end{lstlisting}
+如果输出是0表示不产生core dump文件，
+这个时候为了获得core dump就需要修改这个参数，
+把它改成一个正数或者unlimited表示对core dump的文件大小没有限制。
+
+\begin{lstlisting}
+$ ulimit -c unlimited
+$ ulimit -c
+unlimited
+\end{lstlisting}
+
+\subsection{定制core dump的文件名}
+
+有的Linux默认的core dump的文件名就是core，有的是core.<pid>，
+一般core dump的产生于程序的当前运行目录。
+
+对于~Linux 2.5~以上的版本，我们可以通过配置Linux的内核参数
+\emph{kernel.core\_pattern}\index{kern.core\_pattern}
+来指定core dump的产生位置及文件名，这个文件名是一个模板，
+在文件名中可以使用~\%~开头的修饰符来，
+在实际产生core dump文件的时候会根据这个修饰符来做相应的替换。
+可用的修饰符见表~\ref{sec:tab_core_pattern}~所示。
+
+\begin{table}
+\begin{tabular}{r|l}
+\hline
+通配符 & 含义   \\
+\hline
+\%\%  &   A single \% character    \\
+\%p  &   PID of dumped process   \\
+\%u  &   real UID of dumped process  \\
+\%g  &   real GID of dumped process  \\
+\%s  &   number of signal causing dump   \\
+\%t  &   time of dump (secs since 0:00h, 1 Jan 1970) \\
+\%h  &   hostname (same as the 'nodename' returned by uname(2))  \\
+\%e  &   executable filename \\
+\hline
+\end{tabular}
+\caption{kern.core\_pattern可用的修饰符}\label{sec:tab_core_pattern}
+\end{table}
+
+比如如果我们指定core dump文件名的名字模板为
+\begin{lstlisting}
+/var/crash/%e-%p-%s.core
+\end{lstlisting}
+
+如果我们有一个名为test\_fmr，
+进程号为24214的的进程因为SIGSEGV信号而异常退出了，
+它会在~/var/crash~下生成一个如下一个core dump文件：
+\begin{lstlisting}
+/var/crash/test_fmr-24214-11.core
+\end{lstlisting}
+
+\emph{kern.core\_pattern}~也可以通过proc文件系统来进行配置，
+它在/proc文件系统中的位置为：
+\begin{lstlisting}
+/proc/sys/kernel/core_pattern
+\end{lstlisting}
+
+如果是~Linux 2.4~的版本，由于没有内核参数\emph{kernel.core\_pattern}，
+它对core dump的文件名的控制功能就没有自如了，还好它也有一个内核参数
+\emph{kernel.core\_uses\_pid}
+\footnote{这个参数在新版本的内核是被遗弃的，不再建议使用。}
+\index{kern.core\_uses\_pid}，
+可以用来控制core生成时是否包含进程的pid的。
+它的值可以是0或其它值,
+如果是0则产生的core dump的文件简单的命名为core，
+否则的话产生的core dump文件格式为core.PID。
+\emph{kernel.core\_uses\_pid}在/proc文件系统中的位置为：
+\begin{lstlisting}
+/proc/sys/kernel/core_uses_pid
+\end{lstlisting}
+
+可以通过sysctl、/etc/sysctl.conf或/proc文件系统来修改这两个参数，
+只有修改~/etc/sysctl.conf~才会永久生效。
+
+示例：
+\begin{lstlisting}
+# sysctl -w kernel.core_pattern=/var/crash/%e-%p-%s.core
+\end{lstlisting}
+
+修改~/etc/sysctl.conf~后需要执行如下命令来从新读入~/etc/sysctl.conf：
+\begin{lstlisting}
+# sysctl -p
+\end{lstlisting}
+
+我们可以借助valgrind(参见\ref{valgrind}，第\pageref{valgrind}页)、
+yamd(参见\ref{yamd}，第\pageref{yamd}页)等工具来帮助我们发现程序的内存错误。
+
+\subsection{捕获会导致core dump的信号}
+
+下面的代码能捕获并处理SIGSEGV信号:
+
+\lstinputlisting[language={C++},numbers=left]{code/segv_handler.cpp}
+\begin{figure}
+\caption{捕获会导致core dump的信号的代码}
+\end{figure}
+
+链接的时候需要指定~\code{-rdynamic -ldl}~选项，这样才能获得栈上的信息。
+
+\subsection{定位出错的源代码行}
+调用栈会给出每一帧的地址，我们需要知道这个地址来获得源代码的对应的
+行号来定位出现问题的代码。可以使用~GDB~的~\code{list}~命令来定位，如下所示:
+\begin{lstlisting}
+$ gdb foo
+(gdb) l *0x804904a
+0x804904a is in Foo::run() (test_signal.cpp:181).
+\end{lstlisting}
+
+另外一种方式就是通过addr2line\index{addr2line}来获得：
+%\begin{lstlisting}[language={sh}]
+\begin{lstlisting}
+$ addr2line -e foo 0x804904a
+/home/cm/sandbox/test_signal.cpp:181
+\end{lstlisting}
+
+\subsection{C++名字重整}
+\index{c++filt}
+
+可以通过这篇文章获取更多的在程序在收到SIGSEGV信号时获取调用栈的信息：\\
+Obtaining a stack trace in C upon SIGSEGV\cite{obtain-sigsegv-stack}
+
+\subsection{C++类的内存布局}
+
+针对~GCC~编译后的C++程序，如果一个类存在虚函数，
+那么它的内存布局的第一个成员时虚表指针，然后才是其它的成员函数。
+
+参考下面的代码演示了类~\code{Bar}~的内存布局。
+
+\begin{lstlisting}
+#include <stdlib.h>
+
+class Foo
+{
+    public:
+        Foo()
+        {
+            x = 0x12345678;
+            y = 0x98765432;
+            p = (void*)0x3c3c3c3c;
+        }
+
+        virtual void run() { }
+
+        virtual ~Foo() { }
+
+    private:
+        int x;
+        int y;
+        void* p;
+};
+
+class Bar : public Foo
+{
+    public:
+        Bar() : b(911) {}
+
+        virtual void run() { }
+
+    private:
+        int b;
+};
+
+int main()
+{
+    Bar* f = new Bar;
+    abort();
+}
+\end{lstlisting}
+
+通过~GDB~我们可以清楚的看到~\code{Bar}~的内存布局，
+它的第一个成员变量即为虚表指针。
+
+\begin{lstlisting}
+$ gdb ./a.out
+Program received signal SIGABRT, Aborted.
+0x0012d422 in __kernel_vsyscall ()
+(gdb) f 3
+#3  0x0804860f in main () at memlayout.cpp:37
+37          abort();
+(gdb) p f
+$1 = (Bar *) 0x804b008
+(gdb) p *f
+$2 = (Bar) {
+  <Foo> = {
+    _vptr.Foo = 0x8048808,
+    x = 305419896,
+    y = -1737075662,
+    p = 0x3c3c3c3c
+  },
+  members of Bar:
+  b = 911
+}
+(gdb) x/8x f
+0x804b008:      0x08048808      0x12345678      0x98765432      0x3c3c3c3c
+0x804b018:      0x0000038f      0x00020fe9      0x00000000      0x00000000
+\end{lstlisting}
+
+\section{使用GDB分析core dump文件}
+
+\begin{table}
+\begin{tabularx}{400pt}{l|X}
+\hline
+GDB命令 & 说明 \\
+\hline
+bt                  &   查看core的调用栈    \\
+bt full		        &   查看得完整调用栈信息，包含每一帧的参数值及局部变量的值等 \\
+thread apply all bt &   查看所有线程的调用栈 \\
+frame $n$           &   切换到调用栈的第~$n$~帧 \\
+info threads	    &   查看当前的函数的线程的信息（包括有多少个线程及每个线程的栈顶） \\
+info frame 	        &   查看当前帧的信息 \\
+info local          &   查看当前函数局部变量的值 \\
+info reg		    &   查看寄存器的值 \\
+\hline
+\end{tabularx}
+\caption{GDB调试core dump的常用命令}
+\end{table}
+
+
+\section{调试其它机器上产生的core dump文件}
+
+core dump文件是程序在异常退出时内存的映像。
+
+为了减少core dump文件的大小，core dump文件只保存了可写的节的内存映像，
+而没有包含程序的可执行代码（不可变的）。
+
+调试其它机器上产生的core dump文件不仅需要其它导致core dump的可执行程序，
+而且还需要它依赖的动态库，否则的话使用bt命令可能看到不是正确的结果。
+
+\subsection{示例}
+
+使用~GDB~的~\code{info shared}\index{info shared}
+来获取可执行程序依赖的动态库列表。
+然后把这些动态库打包。
+
+在产生core dump的机器上执行把这些动态库打包：
+
+\begin{lstlisting}
+$ gdb ust ust-3124.core
+(gdb) info shared
+From       To         Syms Read Shared Object Library
+0x4001e44c 0x40026e80 Yes       /rlib/libpthread.so.0
+0x4004d9a0 0x4006adac Yes       /usr/lib/libstdc++-libc6.2-2.so.3
+0x4007faa0 0x400966b4 Yes       /rlib/libm.so.6
+0x400ba590 0x40197bb4 Yes       /rlib/libc.so.6
+0x40001fe0 0x40013808 Yes       /lib/ld-linux.so.2
+0x401fa454 0x40200310 Yes       /lib/libnss_files.so.2
+0x40203010 0x40204c50 Yes       /lib/libnss_dns.so.2
+0x40208c48 0x40212480 Yes       /lib/libresolv.so.2
+(gdb) quit
+$ cd /
+$ tar czf ust_solibs_orig.tar.gz        \
+    /rlib/libpthread.so.0               \
+    /usr/lib/libstdc++-libc6.2-2.so.3   \
+    /rlib/libm.so.6             \
+    /rlib/libc.so.6             \
+    /lib/ld-linux.so.2          \
+    /lib/libnss_files.so.2      \
+    /lib/libnss_dns.so.2        \
+    /lib/libresolv.so.2
+\end{lstlisting}
+
+然后把产生的core dump的可执行文件、
+core dump文件以及依赖的动态库拷贝到目标机器上。
+使用gdb的~\code{set solib-absolute-prefix}\index{solibs-absolute-prefix}
+来设置可执行程序的加载的动态库的绝对路径。
+
+
+\begin{lstlisting}
+$ mkdir /home/cm/ust_solibs_orig
+$ cd /home/cm/ust_solibs_orig
+$ tar zxf ust_solibs_orig.tar.gz
+$ gdb ust
+(gdb) set solib-absolute-prefix /home/cm/ust_solibs_orig
+(gdb) core ust-3124.core
+(gdb) bt
+(gdb) bt full
+\end{lstlisting}
+
+\section{无法获得调用栈的core dump文件分析}
+
+对于某些情况下的core dump文件，使用\code{bt}命令无法获得完整的调用栈。
+这个时候需要借助于反汇编的帮助。使用 \\
+\begin{lstlisting}
+x/i \$eip \index{eip}
+\end{lstlisting}
+来查看当前的正在执行的指令，一般来说这个指令会有非法的地址访问。
+示例：
+
+使用info来查看当前的寄存器信息：\\
+\begin{lstlisting}
+info reg
+\end{lstlisting}
+
+结合当前的寄存器信息和当前的指令可以看出导致core的原因。
+
+\begin{lstlisting}
+Program terminated with signal 11, Segmentation fault.
+Cannot access memory at address 0xb7f07000
+#0  0x0826db92 in UcpfIdbAttachment::IsOmaNniAttachment (this=Cannot access memory at address 0xb6b04150) at idb/UcpfIdbAttachment.h:605
+in idb/UcpfIdbAttachment.h
+(gdb) bt
+#0  0x0826db92 in UcpfIdbAttachment::IsOmaNniAttachment (this=Cannot access memory at address 0xb6b04150)
+    at idb/UcpfIdbAttachment.h:605
+Cannot access memory at address 0xb6b04148
+(gdb) x/i $eip
+0x826db92 <_ZNK17UcpfIdbAttachment18IsOmaNniAttachmentEv+6>:
+    mov    0x10b(%eax),%al
+(gdb) info reg
+eax            0x0          0
+ecx            0x89         137
+edx            0xb250d218   -1303326184
+ebx            0x1caff4     1880052
+esp            0xb6b04148   0xb6b04148
+ebp            0xb6b04148   0xb6b04148
+esi            0x0          0
+edi            0xb6b04400   -1229962240
+eip            0x826db92    0x826db92
+eflags         0x10292      66194
+cs             0x73         115
+ss             0x7b         123
+ds             0xc02e007b   -1070727045
+es             0x7b         123
+fs             0x0          0
+gs             0x33         51
+\end{lstlisting}
+
+\begin{lstlisting}
+$ objdump -S foo > foo.asm
+\end{lstlisting}
+
+\begin{lstlisting}
+00000000 <_ZNK17UcpfIdbAttachment18IsOmaNniAttachmentEv>:
+   0:   55                      push   %ebp
+   1:   89 e5                   mov    %esp,%ebp
+   3:   8b 45 08                mov    0x8(%ebp),%eax
+   6:   8a 80 0b 01 00 00       mov    0x10b(%eax),%al
+\end{lstlisting}
+
+
+\section{总结}
+
+对于如何定制Linux下产生的core dump的文件名的更多信息请参考~Linux~的~\code{core}的手册页。

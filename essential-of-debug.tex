@@ -1,0 +1,167 @@
+﻿% -*- coding: utf-8 -*-
+%
+% latex-chinese-template
+%
+% https://github.com/CTeX-org/ctex-kit/blob/master/templates/LaTeX/utf8.tex
+%
+% See http://tug.ctan.org/tex-archive/language/chinese/ctex/doc/
+%  or https://github.com/CTeX-org/ctex-kit/
+
+% \documentclass[winfonts,UTF8,cs4size,a4paper,fntef]{ctexart}
+\documentclass[fontset=windows,UTF8,zihao=-4,a4paper,openright]{ctexbook}
+
+\usepackage{iftex}
+
+\ifxetex    % xelatex
+  \usepackage[xetex]{hyperref}
+\else
+  \ifpdf    % pdflatex
+    \usepackage[pdftex,unicode]{hyperref}
+  \else     % dvipdfmx or dvips
+    \usepackage[dvipdfmx,unicode]{hyperref}
+    %\usepackage[ps2pdf,unicode]{hyperref}
+  \fi
+\fi
+
+\ifxetex\else\ifpdf\else
+  % pdftex 3.1415926-1.40.10-2.2 has trouble with it
+  \InputIfFileExists{zhwinfonts.tex}{}{}
+\fi\fi
+
+%\renewcommand\ttdefault{courier-ttf}   % 改变全文等宽字体
+
+\newcommand{\param}[1]{\textit{#1}}
+\newcommand{\paramdesc}[1]{\hangafter=1 \setlength{\hangindent}{2em}#1}
+\newcommand{\shcmd}[1]{\underline{#1}}
+\newcommand{\shparam}[1]{\textit{#1}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\gdbcmd}[1]{\texttt{#1}}
+\newcommand{\gdbcmdparam}[1]{\textit{#1}}
+
+\usepackage{xeCJKfntef}
+\usepackage[dvips]{graphicx}
+\usepackage{cite}
+%\usepackage{natbib}  % natbib is a more powerful cit package
+\usepackage{makeidx}
+%\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{fancyhdr}
+%\usepackage{fancyvrb}
+%\usepackage[T1]{fontenc}   %  解决　lstlisting 环境下双引号问题
+\usepackage{upquote}        %  解决　lstlisting 环境下双引号问题
+\usepackage{listings}
+\usepackage{xcolor}     % listings 需要 xcolor
+\lstset{
+    % 不要使用 \ttfamily ，否则会导致编译出现找不到字体的错误
+    basicstyle = \tiny  % 或 \small,
+    %basicstyle=\ttfamily\small,
+    %basicstyle=\ttfamily,
+    numbers = none,     % 行号显示的位置：left, right, none
+    numberstyle = \footnotesize,
+    stepnumber=1,
+    frame   = single,   % 在代码加上一个框
+    tabsize = 2,        % Tab使用2个空格代替
+    showtabs= false,
+    showspaces = false,
+    showstringspaces = false,
+    breaklines=true,
+    breakatwhitespace=false,
+    extendedchars=false %这一条命令可以解决代码跨页时，章节标题，页眉等汉字不显示的问题
+}
+
+\makeindex
+
+%\addtolength{\voffset}{-1cm}
+%\addtolength{\hoffset}{-0.5cm}
+%\addtolength{\textwidth}{1cm}
+
+\begin{document}
+
+\title{程序调试实践要点 - C/C++版}
+\author{陈明}
+\date{\today}
+
+\maketitle
+
+%\clearpage
+\cleardoublepage   % 双面打印(openright)用
+\addcontentsline{toc}{chapter}{目录}
+\tableofcontents
+
+%\clearpage
+\cleardoublepage   % 双面打印(openright)用
+\addcontentsline{toc}{chapter}{图索引}
+\listoffigures
+
+%\clearpage
+\cleardoublepage   % 双面打印(openright)用
+\addcontentsline{toc}{chapter}{表索引}
+\listoftables
+
+\include{ch_preface}
+
+\include{ch_tools}
+
+\include{ch_gdb}
+
+\include{ch_memory}
+
+\include{ch_signal}
+
+\include{ch_multithreading}
+
+\include{ch_coredump}
+
+\include{ch_profile}
+
+\include{ch_linux_kernel_debugging}
+
+\include{ch_network}
+
+\include{ch_others}
+
+\appendix
+
+\chapter{附录}
+
+% \section{GNU汇编}
+%
+% \subsection{GAS汇编语法}
+%
+% TODO
+%
+% \subsection{C语言到汇编语言的转换}
+%
+% TODO
+%
+% \subsubsection{函数调用}
+%
+% TODO
+
+\chapter{后记}
+
+本书是作者多年前调试程序的一些经验的总结。
+
+本书采用 \LaTeX 排版。
+
+\include{ch_copyright}
+
+% 参考文献
+%\clearpage
+\cleardoublepage   % 双面打印(openright)用
+\addcontentsline{toc}{chapter}{参考文献}
+\bibliographystyle{plain}
+%\bibliographystyle{apalike}
+\bibliography{ch_bib}
+
+% 索引
+\printindex
+
+\end{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% END %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% How to compile:
+%   install TeXLive 2009 as described below;
+%   if you use adobefonts with xelatex, put Adobe fonts into ~/.fonts (Linux) or C:\WINDOWS\fonts (Windows);
+%   else put sim*.ttf, sim*.ttc  into ~/.fonts

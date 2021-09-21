@@ -1,0 +1,67 @@
+\chapter{涉及IP网络的问题}
+
+如何抓包并分析参考wireshark的使用
+（第~\ref{sec:wireshark}~节，第~\pageref{sec:wireshark}~页）。
+
+\section{TCP的性能}
+
+\subsection{理解~TIME\_WAIT~状态}
+
+MSL(最大分段生存期)指明 TCP 报文在 Internet 上最长生存时间,
+每个具体的~TCP~实现都必须选择一个确定的 MSL 值。
+RFC 1122 建议是 2 分钟,但 BSD 传统实现采用了 30 秒。
+TIME\_WAIT 状态最大保持时间是 2 * MSL,也就是 1-4 分钟。
+IP 头部有一个 TTL,最大值 255。尽管 TTL 的单位不是秒(根本和时间无关),我们仍需
+假设,TTL 为 255 的 TCP 报文在 Internet 上生存时间不能超过 MSL。
+TCP 报文在传送过程中可能因为路由故障被迫缓冲延迟、选择非最优路径等等,结果
+发送方 TCP 机制开始超时重传。前一个 TCP 报文可以称为"漫游 TCP 重复报文",后一个TCP 报文可以称为"超时重传 TCP 重复报文",作为面向连接的可靠协议,TCP 实现必须
+正确处理这种重复报文,因为二者可能最终都到达。
+一个通常的 TCP 连接终止可以用图描述如下:
+
+%TODO: add tcp close figure
+
+为什么需要 TIME\_WAIT 状态?
+假设最终的 ACK 丢失,server 将重发 FIN,client 必须维护 TCP 状态信息以便可以重发
+最终的 ACK,否则会发送 RST,结果 server 认为发生错误。TCP 实现必须可靠地终止连
+接的两个方向(全双工关闭),client 必须进入 TIME\_WAIT 状态,因为 client 可能面
+临重发最终 ACK 的情形。
+
+此外,考虑一种情况,TCP 实现可能面临先后两个同样的相关五元组。如果前一个连
+接处在 TIME\_WAIT 状态,而允许另一个拥有相同相关五元组的连接出现,可能处理
+TCP 报文时,两个连接互相干扰。使用 SO\_REUSEADDR 选项就需要考虑这种情况。
+为什么 TIME\_WAIT 状态需要保持 2MSL 这么长的时间?
+如果 TIME\_WAIT 状态保持时间不足够长(比如小于 2MSL),第一个连接就正常终止了。
+第二个拥有相同相关五元组的连接出现,而第一个连接的重复报文到达,干扰了第二
+个连接。TCP 实现必须防止某个连接的重复报文在连接终止后出现,所以让 TIME\_WAIT
+状态保持时间足够长(2MSL),连接相应方向上的 TCP 报文要么完全响应完毕,要么被
+丢弃。建立第二个连接的时候,不会混淆。
+
+关于~TIME\_WAIT~状态的更多信息参考
+《Unix Network Programming Vol I》%TODO: add cite
+中 2.6 节解释很清楚了。
+
+
+\subsection{案例：大量的TCP短连接导致的性能下降}
+
+\subsection{慎用RESET选项}
+
+\subsection{F.A.Q}
+
+Q: 如何知道我的进程使用了哪些端口？
+A: Linux系统可以使用~\shcmd{netstat}~的~\param{-p}~参数，
+\param{-p}~的含义是打印进程的~PID。
+比如可以下面的命令来检查~PID~为~24797~的进程所使用的端口情况：
+
+\begin{lstlisting}
+\$ netstat -nap | grep 24797
+tcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      24797/nginx: master
+\end{lstlisting}
+
+也可以使用~\shcmd{lsof -p <PID> | grep IP}~来查看:
+
+\begin{lstlisting}
+\$ sudo lsof -p 24797 | grep IP
+nginx   24797 root  mem    REG      179,2   236960     7123 /usr/lib/arm-linux-gnueabihf/libGeoIP.so.1.6.12
+nginx   24797 root    6u  IPv4   20657646      0t0      TCP *:http (LISTEN)
+nginx   24797 root    7u  IPv6   20657647      0t0      TCP *:http (LISTEN)
+\end{lstlisting}

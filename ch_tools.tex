@@ -1,0 +1,832 @@
+%# -*- coding: utf-8 -*-
+
+\chapter{调试程序的工具}
+
+\section{GDB}
+
+\section{strace}
+\index{strace}
+
+\subsection{简介}
+\shcmd{strace}~能跟踪一个程序的系统调用情况。它会动态显示一个程序执行系统调用的情况，
+它会输出每个系统调用的返回值，如果返回值不是0的话还会显示errno的信息。
+
+\subsection{用法}
+\shcmd{strace}~的用法很简单，只需用在你要执行的程序前面加上strace来执行即可。
+
+\begin{lstlisting}[language={sh}]
+strace prog args...
+\end{lstlisting}
+
+\shcmd{strace}~能用于跟踪某些程序异常退出，它能告诉你程序是因为执行什么系统调用退出的。
+\shcmd{strace}~还能用于分析程序的挂起状态，
+当一个程序挂起不响应请求时可以使用~\shcmd{strace}~看看程序内部在
+执行什么\footnote{也可以使用~\shcmd{gdb}~来分析程序挂起的原因，
+即在程序挂起的时候通过~\shcmd{gdb}~获得程序的栈。}。
+
+\subsection{示例}
+使用~\shcmd{strace}~来跟踪命令~\shcmd{ls \-l \*cpp}~的执行过程：\\
+\begin{lstlisting}[language={sh}]
+$ strace /bin/ls -l *cpp
+execve("/bin/ls", ["/bin/ls", "-l", "segv_handler.cpp", "test_mprotect.cpp", "test_signal.cpp"], [/* 42 vars */]) = 0
+brk(0)                                  = 0x8d3b000
+...
+...
+...
+lstat64("test_mprotect.cpp", {st_mode=S_IFREG|0644, st_size=2002, ...}) = 0
+getxattr("test_mprotect.cpp", "system.posix_acl_access"..., 0x0, 0) = -1 EOPNOTSUPP (Operation not supported)
+lstat64("test_signal.cpp", {st_mode=S_IFREG|0664, st_size=5200, ...}) = 0
+getxattr("test_signal.cpp", "system.posix_acl_access"..., 0x0, 0) = -1 EOPNOTSUPP (Operation not supported)
+fstat64(1, {st_mode=S_IFCHR|0620, st_rdev=makedev(136, 8), ...}) = 0
+mmap2(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xb7d1e000
+open("/etc/localtime", O_RDONLY)        = 3
+fstat64(3, {st_mode=S_IFREG|0644, st_size=163, ...}) = 0
+fstat64(3, {st_mode=S_IFREG|0644, st_size=163, ...}) = 0
+mmap2(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0xb7d1d000
+read(3, "TZif\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\4\0\0\0\4\0\0\0\0"..., 4096) = 163
+close(3)                                = 0
+munmap(0xb7d1d000, 4096)                = 0
+clock_gettime(CLOCK_REALTIME, {1265699498, 844189000}) = 0
+stat64("/etc/localtime", {st_mode=S_IFREG|0644, st_size=163, ...}) = 0
+write(1, "-rw-rw-r--  1 cm cm 4554 Feb  9 "..., 55-rw-rw-r--  1 cm cm 4554 Feb  9 11:52 segv_handler.cpp
+) = 55
+stat64("/etc/localtime", {st_mode=S_IFREG|0644, st_size=163, ...}) = 0
+write(1, "-rw-r--r--  1 cm cm 2002 Jan 19 "..., 56-rw-r--r--  1 cm cm 2002 Jan 19 11:36 test_mprotect.cpp
+) = 56
+stat64("/etc/localtime", {st_mode=S_IFREG|0644, st_size=163, ...}) = 0
+write(1, "-rw-rw-r--  1 cm cm 5200 Feb  9 "..., 54-rw-rw-r--  1 cm cm 5200 Feb  9 11:49 test_signal.cpp
+) = 54
+exit_group(0)                           = ?
+\end{lstlisting}
+
+\section{GLIBC~提供的内存错误检查机制}
+\subsection{简介}
+GLIBC~自~2.x~自带了部分内存检测机制。
+它能检查一些简单内存错误，包括：
+\begin{itemize}
+\item 重复释放（double free）；
+\item 越界写（off-by-one bugs）
+\end{itemize}
+
+通过设置环境变量~MALLOC\_CHECK\_~为不同的值可以控制~GLIBC~的内存错误检测级别：
+
+\begin{description}
+\item[0] 忽略检查到的错误。
+\item[1] 检测到错误时向屏幕输出错误信息，但不中止程序。
+\item[2] 检测到错误时不向屏幕输出错误信息，直接调用~\code{abort()}~中止程序。
+\item[3] 检测到错误时向屏幕输出错误信息，同时调用~\code{abort()}~中止程序。
+\end{description}
+
+通过设置~MALLOC\_CHECK\_~为~2~或者~3~可以及时检测到内存错误，
+否则的话某些内存错误要很久才会暴露，那个时候再查找错误将是件很困难的事。
+
+示例：使用~MALLOC\_CHECK\_~来检测使用重复释放内存的问题。
+
+\begin{lstlisting}
+//
+// double_free.cpp
+//
+
+void foo(char* x)
+{
+    delete[] x;
+}
+
+
+int main()
+{
+    char* x = new char[20];
+
+    foo(x);
+
+    for (int i=0; i<20; ++i) {
+        x[i] = 'a' + i;
+    }
+
+    delete[] x;
+
+    return 0;
+}
+\end{lstlisting}
+
+上面这段代码存在重复释放内存的错误，
+我们看看~MALLOC\_CHECK\_~分别为~0~和~3~的效果。
+
+\begin{lstlisting}
+$ g++ -g double_free.cpp
+$ export MALLOC_CHECK_=0
+$ ./a.out
+$ export MALLOC_CHECK_=3
+$ ./a.out
+*** glibc detected *** ./a.out: free(): invalid pointer: 0x08284008 ***
+======= Backtrace: =========
+/lib/tls/i686/cmov/libc.so.6[0xd2fff1]
+/lib/tls/i686/cmov/libc.so.6(cfree+0xd6)[0xd34836]
+/usr/lib/libstdc++.so.6(_ZdlPv+0x21)[0x47c6f1]
+/usr/lib/libstdc++.so.6(_ZdaPv+0x1d)[0x47c74d]
+./a.out[0x8048591]
+/lib/tls/i686/cmov/libc.so.6(__libc_start_main+0xe6)[0xcdbb56]
+./a.out[0x8048481]
+======= Memory map: ========
+003c4000-004aa000 r-xp 00000000 08:02 554348     /usr/lib/libstdc++.so.6.0.13
+004aa000-004ae000 r--p 000e6000 08:02 554348     /usr/lib/libstdc++.so.6.0.13
+004ae000-004af000 rw-p 000ea000 08:02 554348     /usr/lib/libstdc++.so.6.0.13
+004af000-004b6000 rw-p 00000000 00:00 0
+0091c000-0091d000 r-xp 00000000 00:00 0          [vdso]
+00a86000-00aa1000 r-xp 00000000 08:02 166175     /lib/ld-2.10.1.so
+00aa1000-00aa2000 r--p 0001a000 08:02 166175     /lib/ld-2.10.1.so
+00aa2000-00aa3000 rw-p 0001b000 08:02 166175     /lib/ld-2.10.1.so
+00b92000-00bb6000 r-xp 00000000 08:02 195080     /lib/tls/i686/cmov/libm-2.10.1.so
+00bb6000-00bb7000 r--p 00023000 08:02 195080     /lib/tls/i686/cmov/libm-2.10.1.so
+00bb7000-00bb8000 rw-p 00024000 08:02 195080     /lib/tls/i686/cmov/libm-2.10.1.so
+00cc5000-00e03000 r-xp 00000000 08:02 195076     /lib/tls/i686/cmov/libc-2.10.1.so
+00e03000-00e04000 ---p 0013e000 08:02 195076     /lib/tls/i686/cmov/libc-2.10.1.so
+00e04000-00e06000 r--p 0013e000 08:02 195076     /lib/tls/i686/cmov/libc-2.10.1.so
+00e06000-00e07000 rw-p 00140000 08:02 195076     /lib/tls/i686/cmov/libc-2.10.1.so
+00e07000-00e0a000 rw-p 00000000 00:00 0
+00f26000-00f42000 r-xp 00000000 08:02 166231     /lib/libgcc_s.so.1
+00f42000-00f43000 r--p 0001b000 08:02 166231     /lib/libgcc_s.so.1
+00f43000-00f44000 rw-p 0001c000 08:02 166231     /lib/libgcc_s.so.1
+08048000-08049000 r-xp 00000000 08:04 239702     /home/cm/sandbox/a.out
+08049000-0804a000 r--p 00000000 08:04 239702     /home/cm/sandbox/a.out
+0804a000-0804b000 rw-p 00001000 08:04 239702     /home/cm/sandbox/a.out
+08284000-082a5000 rw-p 00000000 00:00 0          [heap]
+b77e0000-b77e2000 rw-p 00000000 00:00 0
+b77f7000-b77f9000 rw-p 00000000 00:00 0
+bfeb1000-bfec6000 rw-p 00000000 00:00 0          [stack]
+Aborted (core dumped)
+\end{lstlisting}
+
+在设置为~0~时，不会检测到错误，程序看起来正常。
+在设置为~3~时，在第二次释放内存立即检测到了错误，
+向屏幕输出了错误信息，并立即调用~\code{abort()}~终止了程序。
+
+
+\section{mcheck} \index{mcheck}
+\subsection{简介}
+\subsection{使用mcheck来检查内存错误}
+mcheck~是~GLIBC~的一个扩展，它能提供内存的错误
+\subsection{使用mtrace来跟踪内存泄露}
+
+\section{YAMD - Yet Another Malloc Debugger}
+
+\label{yamd}
+\index{YAMD}
+
+C和C++程序要自己来管理内存的分配与释放，这就会出现内存的非法访问。
+
+要调试内存的非法访问是一件比较费时间的事，
+于是乎就出现了各种各样的内存调试工具，
+现在已经有很多针对mall/free new/delete的调试工具，
+有商业的工具比如purify，也有许多开源的工具比如valgrand，
+但各有利弊，有的需要对源代码进行修改（凡是这种工具这种我就不考虑了），
+有的需要在链接的时候进行插桩，比如purify。
+
+在众多工具中我发现YAMD(Yet Another Malloc Debugger)其实是一个不错的选择，
+它可以不需要我们现有的程序做任何改动就能发现程序的错误。
+
+能支持YAMD的平台：Linux， DJGPP。 它能处理C的malloc/free及C++的new/delete
+
+\subsection{原理}
+
+YAMD可以通过设置环境变量LD\_PRELOAD来先于libc加载，从而实现自己的malloc系列函数。
+
+\subsection{使用YAMD}
+
+要使用~YAMD，需要你的程序使用~GCC~进行编译，需要~\code{-g}~选项，
+而且链接时不能有~\code{-fomit-frame-pointer}~和~\code{-s}~参数。
+也可以静态链接YAMD，在此就不做讨论了。
+
+YAMD~提供了一个脚本rum-yamd用来运行你要调试的程序
+rum-yamd [options] program [args]
+
+示例：
+\begin{lstlisting}
+run-yamd -l 2 -o x.log ./foo
+\end{lstlisting}
+
+\subsection{更多信息}
+
+  YAMD的主页
+    https://www.cs.hmc.edu/~nate/yamd/
+
+  Options of run-yamd:
+
+  -r : When corrupted magic bytes are found, fix ("repair") them after
+   reporting to prevent further reports.  Default is to leave them.
+
+  -d : If corrupted magic bytes are found, abort the program after
+   reporting ("die").  Default is to continue.
+
+  -f : Check the front (prefix) of blocks, instead of the end.  This
+   is useful for catching negative overruns.
+
+  -a nnn : Set default alignment of allocated blocks for which
+   alignment is not specified (as with `memalign').  Must be a power
+   of 2, and should be as small as possible to catch the most bugs.
+   Default is 1, which provides the best checking, and is also faster
+   (it avoids a lot of manual overrun checking).  The unaligned memory
+   accesses have not proven to be a problem.
+
+  -o file : Direct the log output to `file'.  Default is stderr.
+
+  -l n : Set the minimum log level to n.  1 is INFO, 2 is WARNING, 3
+   is ERROR.
+
+  -s : Inform run-yamd that the program in question has YAMD
+   statically linked with it, to prevent it from loading it
+   dynamically (which is the default).
+
+  -i : When loading YAMD dynamically, have other programs exec'd by
+   the child inherit YAMD.  This is not well tested and may fail if
+   the grandchildren were linked against a different libc version, for
+   instance.
+
+  -c file : Specify the YAMD shared object file.  Default is
+   LIBDIR/libyamd-dynamic.so.
+
+  -n : Omit the step which symifies the log (it can be slow).  This is
+   probably not useful except for testing.
+
+  -v : Print version and exit.
+
+  -h : Print short help message and exit.
+
+
+\section{valgrind}
+\label{valgrind} \index{valgrind}
+\subsection{简介}
+Valgrind is an award-winning instrumentation framework for building dynamic analysis tools. There are Valgrind tools that can automatically detect many memory management and threading bugs, and profile your programs in detail.
+
+https://www.valgrind.org
+
+\subsection{使用}
+
+更多关于valgrind的信息请参考valgrind的手册\cite{valgrind-man}
+
+\section{Purify}
+\label{Purify} \index{Purify}
+Purify是IBM的PurifyPlus\index{PurifyPlus}套件中的分析程序内存错误的工具。
+Purify支持的平台包括Windows和Linux，HP-UX，AIX等UNIX操作系统。
+
+
+\section{Bounds Checking}
+\emph{Bounds checking}~是~GCC~的一个补丁，
+它通过增加一个新的编译选项~\code{-fbounds-checking}~
+它能实现运行时的指针和数组的边界检查。
+
+\subsection{使用示例}
+
+\subsubsection{检查指针越界写}
+
+\begin{lstlisting}
+$ cat bc.c
+     1  main() {
+     2      char *malloc(); char *a = malloc(2);
+     3      a[2] = 'x';
+     4  }
+$ gcc -fbounds-checking bc.c
+$ export GCC_BOUNDS_OPTS="-print-heap"
+$ ./a.out
+Bounds Checking GCC v gcc-3.4.6-3.2 Copyright (C) 1995 Richard W.M. Jones
+Bounds Checking comes with ABSOLUTELY NO WARRANTY. For details see file
+`COPYING' that should have come with the source to this program.
+Bounds Checking is free software, and you are welcome to redistribute it
+under certain conditions. See the file `COPYING' for details.
+For more information, set GCC_BOUNDS_OPTS to `-help'
+bc.c:3:Bounds error: attempt to reference memory overrunning the end of an object.
+bc.c:3:  Pointer value: 0x808a002, Size: 1
+bc.c:3:  Object `malloc':
+bc.c:3:    Address in memory:    0x808a000 .. 0x808a001
+bc.c:3:    Size:                 2 bytes
+bc.c:3:    Element size:         1 bytes
+bc.c:3:    Number of elements:   2
+bc.c:3:    Created at:           bc.c, line 2
+bc.c:3:    Storage class:        heap
+Aborted (core dumped)
+\end{lstlisting}
+
+
+\subsection{如何编译Bounds checking的补丁}
+
+Bounds checking~的补丁当前支持~GCC~4.0.4，4.0.2，3.4.6。
+可以从~https://williambader.com/bounds/example.html~下载。
+下载完了按照它的说明进行编译即可。
+需要说明的时候在configure的时候可以指定选项，
+下面的configure命令式我使用的，
+我只需要对~C，C++~语言的支持，
+而且在编译后的~gcc~可执行文件后面加上3.4.6的后缀，
+便于我区分这个~gcc~是不是有~Bounds checking的。
+
+\begin{lstlisting}
+../configure --prefix=/home/cm/opt \
+                      --enable-languages=c,c++ \
+                      --enable-shared   \
+                      --disable-werror  \
+                      --enable-threads=posix    \
+                      --program-suffix=3.4.6    \
+                      --without-included-gettext
+\end{lstlisting}
+
+更多关于~Bounds checking~的信息参考~\cite{bounds-checking-example}。
+
+
+\section{抓包工具}
+
+\subsection{tcpdump}
+tcpdump\index{tcpdump}是最原始的，也是最通用的抓包的工具，在很多系统下都有找到它。
+
+\begin{lstlisting}
+tcpdump -i any -s 0 -w sip.pcap "port 5060"
+\end{lstlisting}
+
+\subsection{Wireshark}
+\label{sec:wireshark}
+\index{Wireshark}
+
+Wireshark~是图形化的抓包的工具，它的前身是~ethereal。
+没什么好说的，图形化的界面，很容易上手。
+
+在~Wireshark~中提供部分的统计功能，在分析大量包的统计特性时比较有用，
+比如分析丢包率，各种消息的比例等。
+
+Wireshark~是可扩展的，可以为它添加新的协议解析插件。
+
+\subsection{tshark}
+
+tshark~比是Wireshark的命令行版本，它能像tcpdump一样用于抓包和对包进行分析。
+tshark~提供更多的功能，比如它对过滤条件支持更丰富，它还能提供统计的功能。
+
+\subsubsection{tshark~的用法}
+
+tshark~的用法如下：
+
+\begin{lstlisting}
+tshark [ -a <capture autostop condition> ] ...
+  [ -b <capture ring buffer option>] ...
+  [ -B <capture buffer size (Win32 only)> ]
+  [ -c <capture packet count> ]
+  [ -C <configuration profile> ]
+  [ -d <layer type>==<selector>,<decode-as protocol> ]
+  [ -D ]
+  [ -e <field> ]
+  [ -E <field print option> ]
+  [ -f <capture filter> ]
+  [ -F <file format> ]
+  [ -h ]
+  [ -i <capture interface>|- ]
+  [ -K <keytab> ]
+  [ -l ]
+  [ -L ]
+  [ -n ]
+  [ -N <name resolving flags> ]
+  [ -o <preference setting> ] ...
+  [ -p ] [ -q ]
+  [ -r <infile> ]
+  [ -R <read (display) filter> ]
+  [ -s <capture snaplen> ]
+  [ -S ]
+  [ -t ad|a|r|d|dd|e ]
+  [ -T pdml|psml|ps|text|fields ]
+  [ -v ] [ -V ]
+  [ -w <outfile>|- ]
+  [ -x ]
+  [ -X <eXtension option>]
+  [ -y <capture link type> ]
+  [ -z <statistics> ]
+  [ <capture filter> ]
+\end{lstlisting}
+
+主要的命名行参数如下：
+
+\noindent
+\shcmd{-c  <\shparam{capture packet count}>}
+
+\paramdesc{设置抓包总共数目的限制。如果是从文件读取的数据，最多读取指定数目的包。}
+
+\noindent
+\shcmd{-d  <\shparam{layer type}>==<\shparam{selector}>,<\shparam{decode-as protocol}>}
+
+\paramdesc{类似~Wireshark~的“Decode As...”，强制把符合条件包解析为指定的协议。
+比如~\shcmd{-d tcp.port==8888,http}~会强制把~TCP~的~8888~端口上数据解析为~HTTP~协议。
+\shcmd{-d .}~列出所有支持的~\shparam{selector}。}
+
+
+\noindent
+\shcmd{-D}
+
+\paramdesc{打印出可用的网络接口。该命令的输出可以供~\shcmd{-i}~使用。}
+
+\noindent
+\shcmd{-f  <\shparam{capture filter}>}
+
+\paramdesc{指定对包的过滤条件。该条件通tcpdump抓包时使用的过滤条件一致。}
+
+\noindent
+\shcmd{-F  <\shparam{file format}>}
+
+\paramdesc{在要把抓获的包写入文件时（使用参数~\shcmd{-w}），指定数据存储的文件格式。
+如果没有指定~\shparam{file format}，打印所有支持的文件格式。}
+
+
+\noindent
+\shcmd{-i  <\shparam{capture interface}>|\shparam{-}}
+
+\paramdesc{设置抓包的网络的接口，可以使用命令~\shcmd{tshark -D}~获得当前系统可用的网络接口。
+如果没有指定该参数，使用第一个非~loopback~接口。
+如果要抓取所有接口上包，可以使用~\shparam{any}~来代表所有的接口。
+如果参数是~\shparam{-}，表示从标准输入读取数据，一般用于命令管道。}
+
+\noindent
+\shcmd{-n}
+
+\paramdesc{禁用名字解析（DNS、TCP/UDP端口名等）。
+参数~\shcmd{-N}~会覆盖该参数。见下。}
+
+\noindent
+\shcmd{-N  <\shparam{name resolving flags}>}
+
+\paramdesc{指定需要进行名字解析的标志，
+以决定在抓包时是否解析IP地址，端口，MAC地址等。
+该标志为一个字符串，每个字符表示相应的标志。
+支持的标志参见表~\ref{tab:tshark_Nflags}。
+如果同时指定参数~\shcmd{-n}~和参数~\shcmd{-N}，
+参数~\shcmd{-N}~会覆盖参数~\shcmd{-n}。
+如果~\shcmd{-N}~和~\shcmd{-n}~都没有指定，开启所有的名字解析。
+}
+
+\begin{table}[!bhp]
+\begin{tabularx}{400pt}{l|X}
+\hline
+\hline
+标志 & 说明\\
+\hline
+m & 启用~MAC~地址解析。\\
+n & 启用网络地址解析。\\
+t & 启用端口名称解析（端口名称定义在/etc/services中）。\\
+C & 启用异步DNS解析。\\
+\hline
+\hline
+\end{tabularx}
+\caption{tshark名字解析支持的标志}\label{tab:tshark_Nflags}
+\end{table}
+
+
+\noindent
+\shcmd{-r  <\shparam{infile}>}
+
+\paramdesc{从指定的文件~\shparam{infile}~中读取抓包文件（支持GZIP压缩过的文件）。}
+
+\noindent
+\shcmd{-R  <\shparam{read (display) filter}>}
+
+\paramdesc{使用~Wireshark~的显示过滤条件来作为抓包的过滤条件（比如''sip || tcp.port == 2944''）。
+而且在打印包的内容时会先使用过滤条件进行解包，
+比如~\shcmd{-R ''\shparam{sip}''}~就比~\shcmd{''\shparam{port 5060}''}~更易读。
+默认的是使用~tcpdump~格式的抓包过滤条件。
+}
+
+\noindent
+\shcmd{-s  <\shparam{capture snaplen}>}
+
+\paramdesc{设置缺省的抓包时每个包的最大长度。
+如果设置为~0~表示没有限制，整个包都会被抓取，这是缺省设置。}
+
+\noindent
+\shcmd{-S}
+
+\paramdesc{即使在指定了~\shcmd{-w}~的时候也在抓包时实时解包并将其结果向屏幕输出。
+默认情况下如果指定了~\shcmd{-w}~参数，抓包的结果会直接写入文件而不向屏幕输出。}
+
+\noindent
+\shcmd{-w  <\shparam{outfile}>|-}
+
+\paramdesc{把抓包的结果写入文件~\shparam{outfile}，如果指定为‘-’表示写向标准输出。}
+
+\noindent
+\shcmd{-z  <\shparam{statistics}>}
+
+\paramdesc{收集统计信息。
+如果只想查看统计信息而对每个具体的包不感兴趣的话需要加上~\shcmd{-q}~参数。
+常用的统计参数~\shparam{statistics}~如下：}
+
+\noindent
+\shcmd{-z io,stat,\shparam{interval}[,\shparam{filter}][,\shparam{filter}]\ldots}
+
+\paramdesc{获取指定时间间隔~\shparam{intervals}~（单位为秒）的IO统计信息。
+如果~\shparam{intervals}~为~0，统计所有的包。
+参数~\shparam{filter}~为要统计的包过滤条件。
+比如''-z io,stat,1,smb\&\&ip.addr==1.2.3.4''产生符合条件''smb\&\&ip.addr==1.2.3.4''的1秒间隔的统计信息。}
+
+\noindent
+\shcmd{-z rtp,streams}
+
+\paramdesc{产生所有~RTP~流的统计信息。}
+
+\noindent
+\shcmd{-z smb,rtt[,\shparam{filter}]}
+
+\paramdesc{统计~SMB~协议的~RTT（Round-Trip Time）信息。}
+
+
+\noindent
+\shcmd{-z megaco,rtd[,\shparam{filter}]}
+
+\paramdesc{产生~MEGACO~的~RTD~(Response Time Delay)统计信息。
+\shparam{filter}~为附加的过滤条件。}
+
+
+\noindent
+\shcmd{-z h225,counter[,\shparam{filter}]}
+
+\paramdesc{统计~H.225~消息和它的原因。}
+
+\noindent
+\shcmd{-z h225,srt[,\shparam{filter}]}
+
+\paramdesc{收集~H.225~的~SRT（Service Response Time）统计数据。}
+
+\noindent
+\shcmd{-z sip,stat[,\shparam{filter}]}
+
+\paramdesc{统计~SIP~消息。
+示例：\shcmd{-z "sip,stat\shparam{,ip.addr==1.2.3.4}"}。}
+
+
+\subsubsection{tshark~的用法示例}
+获取可用的网络接口：
+\begin{lstlisting}
+tshark -D
+\end{lstlisting}
+
+
+抓所有网络接口上的包：
+\begin{lstlisting}
+tshark -i any -s 0 -w x.pcap
+\end{lstlisting}
+
+\begin{lstlisting}
+tshark -i any -s 0 -w sip.pcap -R "sip"
+\end{lstlisting}
+
+
+过滤所有奇数端口的UDP包：
+\begin{lstlisting}
+tshark -n -R "udp and (udp.port&1)"
+\end{lstlisting}
+
+过滤所有偶数端口的UDP包：
+\begin{lstlisting}
+tshark -n -R "udp and (not (udp.port&1))"
+\end{lstlisting}
+
+\shcmd{tshark}~很适合用于脚本中来对包进行分析。
+
+\subsubsection{案例：使用~\shcmd{tshark}~对PoC的RTCP进行统计}
+假设我们已经抓取的~RTCP~包经过过滤后都是POC1的floor control包，
+因为端口的随机性，默认情况下~\shcmd{tshark}~并不知道这些包是~RTCP~包，
+这就需要先对这些包进行强制解包，然后再根据包的类型来统计。
+强制解包需要需要使用~\shparam{-d}~参数，这个参数可以重复多次。
+下面是一个示例脚本：
+
+\begin{lstlisting}
+#!/bin/sh
+# Date: Jan 28, 2010
+# Author: Chen Ming
+# Description:
+#   Decode all packets as RTCP. Then make POC1 floor
+#   statistics.
+#
+# Usage:
+#   $0 <infile>
+#
+
+stat()
+{
+    key=$1
+    file=$2
+    count=$(grep "$key" $file | wc -l)
+    echo "$key: $count"
+}
+
+
+infile=$1
+outfile=rtcp.out
+
+ports=$(tshark -r $infile  | awk '{print $9}' | sort | uniq)
+for p in $ports
+do
+  d="$d -d udp.port==$p,rtcp"
+done
+
+tshark $d -r $infile > $outfile
+
+stat "Grant" $outfile
+stat "Idle" $outfile
+stat "Deny" $outfile
+stat "Taken" $outfile
+stat "Sender Report" $outfile
+\end{lstlisting}
+
+使用示例：
+\begin{lstlisting}
+./floor_stat.sh  rtcp.pcap
+\end{lstlisting}
+% TODO: 添加输出结果
+
+
+\subsection{nettl - HP-UX下的抓包工具}
+HP-UX~提供了自己的抓包工具~\emph{nettl}\index{nettl}。
+在tcpdump不能用的时候它（比如tcpdump在HP-UX上就不能抓回环上的包）
+就能派上用场了。
+
+总结一下nettl的主要用法。
+
+开始抓包：
+\begin{lstlisting}
+# nettl -tn all -e all -maxtrace 99999 -f /tmp/tixiang
+# nettl -tn loopback -e ns_ls_tcp -maxtrace 99999 -f /tmp/tixiang
+# nettl -tn pduin pduout -e ns_ls_loopback -tm 100000 -f /tmp/local
+# nettl -tn pduin pduout -e ns_ls_loopback -m 56 -tm 100000 -f /tmp/local
+# nettl -tn pduin -e ns_ls_loopback -m 56 -tm 100000 -f /tmp/local
+\end{lstlisting}
+
+-m size 限制每个包的大小。我们不一定对所有的包都感兴趣，在只对包头干兴趣的时候这个选项就非常有效。
+FDB协议使用的包头为16个字节，再加上IP头的20个字节，TCP头的20个字节，也就是我们只需要总共56个字节就能确定一个包的基本信息了。
+
+-e subsytem 要抓包的类型，可以使用 nettl -status 来获取。常用的subsystem有：
+\begin{lstlisting}
+ns_ls_loopback
+ns_ls_ip
+ns_ls_tcp
+ns_ls_udp
+ns_ls_icmp
+\end{lstlisting}
+
+-tm maxsize 每个文件的最大大小，如果超过此大小，会使用下一个抓包文件。单位：KB。有效值：100~99999
+
+抓包的输出文件为 /tmp/tixiang.xxxx，使用 ls -l /tmp/tixiang.* 来检查
+
+说明：
+在 ns\_ls\_loopback 上抓包如果指定了pduin 和 pduout 每个包会抓到2份，因为一进一出就是两份。
+如果指定 -tn all -e all 一个包也会抓到多份，因为一个包可能属于不同的~subsystem，比如一个tcp包既属于tcp，也属于ip等。
+
+抓的包可以使用wireshark来打开并进行分析。也可以使用HP-UX自带的netfmt来分析。
+
+查看状态及-entity可用的信息：
+\begin{lstlisting}
+# nettl -status
+\end{lstlisting}
+
+停止抓包：
+\begin{lstlisting}
+# nettl -tf -e all
+\end{lstlisting}
+
+\subsubsection{对包的分析}
+
+我们可以使用~netfmt~来分析捕获的包：
+
+得到包的统计信息：
+\begin{lstlisting}
+netfmt -s /tmp/nettl_t*
+\end{lstlisting}
+
+解析包的内容：
+\begin{lstlisting}
+netfmt -N -l -f /tmp/nettl_t* | more
+\end{lstlisting}
+
+可以过滤我们感兴趣的包，使用~-c~来传入过滤文件
+\begin{lstlisting}
+netfmt -N -l -c filter -f /tmp/nettl_t* | more
+\end{lstlisting}
+
+filter~为过滤文件，文件内容的类似如下：
+\begin{lstlisting}
+filter tcp_sport 1234
+filter tcp_dport 1234
+\end{lstlisting}
+每一行为一个过滤条件，行与行之间是\emph{或}的关系。
+常用的过滤条件有
+
+\noindent
+\shcmd{filter dest \param{value}}\\
+\shcmd{filter source \param{value}}
+
+\paramdesc{\param{value}~是以16进制表示的6个字节的硬件~MAC~地址（不要开头的0x），可以使用'-'来作为分割符。示例：00-24-8C-63-A4-83。 }
+
+\noindent
+\shcmd{filter dsap \param{value}}\\
+\shcmd{filter ssap \param{value}}
+
+\paramdesc{\param{value}~可以是一个以0x开头的16进制数，
+也可以是一个以0开头的八进制数，或十进制的数。范围为0到255。}
+
+\noindent
+\shcmd{filter interface \shparam{value}}
+
+\paramdesc{\shparam{value}~是网络接口的名字，lan\shparam{n}~用于表示~LAN~接口，
+其中~\shparam{n}~是序号，比如第一个网络接口名称为~lan0。
+lon~表示~loopback~接口。}
+
+\noindent
+\shcmd{filter ip\_daddr \param{value}}\\
+\shcmd{filter ip\_saddr \param{value}}
+
+\paramdesc{\param{value}~是主机名或点分十进制格式的IP地址。
+示例：www.example.com 或 1.2.3.4。}
+
+\noindent
+\shcmd{filter ip6\_daddr \param{value}}\\
+\shcmd{filter ip6\_saddr \param{value}}
+
+\paramdesc{\param{value}~是一个主机名或以冒号分割的IPv6地址。
+示例：www.example.com 或 2000:1234:5678:abcd::13f2。}
+
+\noindent
+\shcmd{filter ip\_proto \param{value}}\\
+\shcmd{filter ip6\_proto \param{value}}
+
+\paramdesc{\param{value}~可以是一个以0x开头的16进制数，
+也可以是一个以0开头的八进制数，或十进制的数。范围为0到255。}
+
+\noindent
+\shcmd{filter tcp\_dport \param{value}}\\
+\shcmd{filter tcp\_sport \param{value}}\\
+\shcmd{filter udp\_dport \param{value}}\\
+\shcmd{filter udp\_sport \param{value}}
+
+\paramdesc{\param{value}~可以是一个2字节的表示端口的数字，
+或者是一个服务名（在/etc/services中定义）。
+如果是数字可以是一个以0x开头的16进制数，
+也可以是一个以0开头的八进制数，或十进制的数。范围为0到65535。}
+
+
+使用行模式来显示（这种模式下不会看到包的具体数据）
+\begin{lstlisting}
+netfmt -N -n -l -1 -f /tmp/nettl_t* | more
+\end{lstlisting}
+
+在每行的显示前加上时间戳
+\begin{lstlisting}
+netfmt -T -n -l -1 -f /tmp/nettl_t* | more
+\end{lstlisting}
+
+有关~HP-UX~下抓包的~nettl~和~netfmt~的更多信息参考
+\cite{nettl-intro}
+\cite{nettl-man}
+\cite{netfmt-man}。
+
+
+\section{nc（netcat）- Linux下调试调试TCP/UDP的工具}
+
+\index{nc}
+
+\subsection{简介}
+
+\shcmd{nc}~是~Linux~提供的一个能用于模拟~TCP/UDP~服务器/客户端的工具。
+
+% TODO
+
+\section{lsof}
+\index{lsof}
+\subsection{简介}
+
+\shcmd{lsof}~是~Unix~平台下用于检查系统打开文件的工具。
+它还能用于检查某个端口是被哪个进程正在使用。
+类似的工具有~\shcmd{fuser}\index{fuser}，但~\shcmd{lsof}~的功能最强大。
+
+\subsection{用法示例}
+
+\subsubsection{用于检查网络连接信息}
+
+列出所有的网络连接信息：
+\begin{lstlisting}
+$ sudo lsof -i
+\end{lstlisting}
+
+查看使用端口~80~的进程：
+\begin{lstlisting}
+$ sudo lsof -n -P -i:80
+COMMAND   PID     USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+nginx   24797     root    6u  IPv4 20657646      0t0  TCP *:80 (LISTEN)
+nginx   24797     root    7u  IPv6 20657647      0t0  TCP *:80 (LISTEN)
+nginx   24798 www-data    6u  IPv4 20657646      0t0  TCP *:80 (LISTEN)
+nginx   24798 www-data    7u  IPv6 20657647      0t0  TCP *:80 (LISTEN)
+\end{lstlisting}
+
+其中参数~\shcmd{-n}~表示不进行\emph{机器名}的~DNS~解析，
+参数~\shcmd{-P}~表示不进行\emph{端口}名字解析。
+
+\subsubsection{检查被删除了之后仍然被应用程序使用的文件}
+
+\begin{lstlisting}
+$ sudo lsof | grep deleted
+systemd-l   387                             root  txt       REG      179,2     202300      72085 /usr/lib/systemd/systemd-logind (deleted)
+systemd   13694                               pi  txt       REG      179,2    1239132      72068 /usr/lib/systemd/systemd (deleted)
+(sd-pam)  13695                               pi  txt       REG      179,2    1239132      72068 /usr/lib/systemd/systemd (deleted)
+php-cgi   25632                         www-data    3u      REG       0,40          0     524256 /tmp/.ZendSem.7JSJbe (deleted)
+php-cgi   25633                         www-data    3u      REG       0,40          0     524256 /tmp/.ZendSem.7JSJbe (deleted)
+php-cgi   25634                         www-data    3u      REG       0,40          0     524256 /tm
+\end{lstlisting}

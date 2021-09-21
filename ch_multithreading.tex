@@ -1,0 +1,211 @@
+%# -*- coding: utf-8 -*-
+
+\chapter{多线程的调试}
+\label{ch_mt} \index{多线程的调试}
+
+\section{简介}
+
+\section{线程安全问题}
+\index{线程安全}
+
+\section{饥饿}
+线程无限期的等待资源而不能获得。
+比如低优先级线程等待的资源总是被高优先级线程获取。
+
+\section{死锁问题} \index{死锁}
+
+\subsection{导致死锁的原因}
+导致死锁至少有两个锁在互相争用。
+Mutual exclusion
+Only one thread at a time can use a resource.
+
+Hold and wait
+Thread holding at least one resource is waiting to acquire additional resources held by other threads
+
+No preemption
+Resources are released only voluntarily by the thread holding the resource, after thread is finished with it
+
+Circular wait
+There exists a set {T1, \ldots, Tn} of waiting threads
+  T1 is waiting for a resource that is held by T2
+  T2 is waiting for a resource that is held by T3
+  ...
+  Tn is waiting for a resource that is held by T1
+
+\subsection{死锁检测} \index{死锁检测}
+
+\subsection{死锁检测算法}
+Only one of each type of resource $\rightarrow$ look for loops
+
+更一般的死锁检测算法
+Let [X] represent an m-ary vector of non-negative 
+integers (quantities of resources of each type):
+    用[X]代表包含m个元素的数组，m为每种类型的资源数目：
+    [FreeResources]代表当前可用的资源；
+    [RequestX]代表来自线程X的请求；
+    [AllocX]代表线程X获得的资源。
+
+    检查一个任务是否能最终完成的算法如下：
+        
+See if tasks can eventually terminate on their own
+
+\begin{lstlisting}
+[Avail] = [FreeResources] 
+Add all nodes to UNFINISHED 	
+do {
+  done = true
+  Foreach node in UNFINISHED {	
+    if ([Requestnode] <= [Avail]) {
+      remove node from UNFINISHED
+      [Avail] = [Avail] + [Allocnode]
+      done = false
+    }
+   }
+} until(done)				
+\end{lstlisting}
+如果UNFINISHED非空，那么就有死锁产生了。
+
+
+应用程序本身是无法检查到死锁的。
+
+\begin{table}
+\caption{分析程序挂起状态的脚本}
+\begin{lstlisting}[language={sh}]
+#!/bin/sh
+
+if [ $# -ne 1 ] ; then
+  echo "Usage: $0 <pid>"
+  exit 1
+fi
+
+pid=$1
+
+\end{lstlisting}
+\end{table}
+
+\subsection{如何避免死锁}
+死锁的避免\index{死锁避免}需要从设计上进行
+
+当检测到死锁时，需要进行如下操作：
+
+Terminate thread, force it to give up resources
+\begin{itemize}
+\item[-]结束线程，强迫该线程放弃资源。
+
+In Bridge example, Godzilla picks up a car, hurls it into the river.  Deadlock solved!
+Shoot a dining lawyer
+But, not always possible – killing a thread holding a mutex leaves world inconsistent
+
+Preempt resources without killing off thread 
+\item[-]抢占资源而不需要结束线程。
+
+Take away resources from thread temporarily
+Doesn’t always fit with semantics of computation
+
+Roll back actions of deadlocked threads 
+\item[-]回滚会导致死锁的线程。
+在数据库的操作中，为了保证事务的原子性，这种方式使用的比较多。
+    Hit the rewind button on TiVo, pretend last few minutes never happened
+For bridge example, make one car roll backwards (may require others behind him)
+Common technique in databases (transactions)
+Of course, if you restart in exactly the same way, may reenter deadlock once again
+
+\end{itemize}
+
+
+\section{Monitor}
+Monitor~\index{Monitor}是使用一把锁和一个或多个条件变量来保护在并发中的共享数据的一种方式。
+Monitor~代表的逻辑是：
+\begin{itemize}
+\item[-] 等待如果需要的话；
+\item[-] 当条件满足的时候唤醒等待在该条件上的线程继续执行。
+\end{itemize}
+
+在\emph{生产者/消费者}模型中，为了同步\emph{生产者}和\emph{消费者}线程，
+Monitor~被广泛的使用。 
+Monitor主要依靠\emph{条件变量}来实现，
+一个\emph{条件变量}需要和一个\emph{锁}关联起来。
+Monitor~是一个很容易产生错误的模式，这里举例说明通常使用Monitor的方式。
+
+消费者线程：
+\begin{lstlisting}
+...
+pthread_mutex_lock(&lock);
+while (condition is false) {          // check and/or update 
+  pthread_cond_wait(&condvar, &lock); // state variables
+}                                     // wait if necessary
+pthread_mutex_unlock(&lock);
+...
+\end{lstlisting}
+\code{pthread\_cond\_wait()}\index{pthread\_cond\_wait}的语义要求原子的完成如下两个操作：
+\begin{enumerate}
+\item 释放之前已经获得的锁\param{lock}；
+\item 调用线程进入睡眠状态，直到其它的线程调用\code{pthread\_cond\_signal()}来唤醒自己。
+\end{enumerate}
+在\code{pthread\_cond\_wait()}返回的时候，它会自动获取在睡眠之前释放的锁\param{lock}。
+
+\emph{说明}：
+\begin{enumerate}
+\item 在调用\code{pthread\_cond\_wait()}之前一定要先获得\emph{条件变量}使用的\emph{锁}\param{lock}。
+\item 在\code{pthread\_cond\_wait()}返回之后我们通常要再次测试条件是否满足，
+因为可能存在假的唤醒操作\footnote{我们的程序的应该尽量避免这种假的唤醒，但是有时候还是很难避免的。}。
+这就是为什么要使用while而不是if的原因了。这里也是容易产生错误的地方。
+\end{enumerate}
+
+生产者线程：
+\begin{lstlisting}
+...
+pthread_mutex_lock(&lock);
+
+// check and/or update state variables
+if (condition is true)
+  pthread_cond_signal(&condvar);
+pthread_mutex_unlock(&lock);
+
+...
+\end{lstlisting}
+
+\emph{说明}：
+\begin{enumerate}
+\item 在条件变成真的时候，调用\code{pthread\_cond\_signal()}\index{pthread\_cond\_signal}来唤醒等待在该条件上的线程。
+\item 这段代码可能导致潜在的\emph{锁竞争}\index{锁竞争}。
+设想在比较极端的情况下，在\code{pthread\_cond\_signal()}被调用后，
+等待在该条件上线程立即被唤醒了，并被调度开始立即执行，
+这个时候它会因为不能获取\emph{锁}\param{lock}而立刻停止。
+解决这种锁争用的方法之一是把\code{pthread\_cond\_signal()}的调用放在\code{pthread\_mutex\_unlock()}之后。
+修改后的代码看起来想这样：
+\begin{lstlisting}
+...
+pthread_mutex_lock(&lock);
+
+// check and/or update state variables
+pthread_mutex_unlock(&lock);
+
+if (condition is true)
+  pthread_cond_signal(&condvar);
+...
+\end{lstlisting}
+\end{enumerate}
+
+
+
+
+
+\section{如何调试多线程的程序}
+
+\subsection{使用valgrind来调试多线程程序}
+valgrind~\index{valgrind}提供了对多线程进行分析的工具，能发现多线程中的问题。
+版本3.5.0的valgrind提供如下工具进行多线程的调试。
+
+\subsection{使用Intel的线程检查器来调试多线程程序} 
+\index{Intel线程检查器}
+Intel~提供线程检查器(Intel\textregistered Thread Checker)了多线程的调试工具，
+可以在~x86~的~Linux~平台下使用。它能检查应用程序的竞争与死锁等问题。
+并准确的在源代码层找到错误的位置以及出错的调用栈。
+使用方法
+
+
+\section{总结}
+
+更多关于Intel线程检查的信息参考Intel官方网站\cite{intel-thread-checker}
+

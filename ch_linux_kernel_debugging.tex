@@ -1,0 +1,394 @@
+\chapter{Linux内核调试}
+
+\section{Linux内核调试基础}
+
+\section{Oops}
+\index{Oops}
+Oops是内核编程中比较容易遇到的问题，为了跟多的了解Oops来便于调试，我对Oops提供的信息进行一个总结，以及如何调试Oops。
+
+
+一个完整的Oops：
+
+\begin{lstlisting}
+BUG: unable to handle kernel paging request at 00316b01
+IP: [<c05dd045>] netif_receive_skb+0x335/0x377
+*pde = 00000000
+Thread overran stack, or stack corrupted
+Oops: 0000 [#1] SMP
+last sysfs file: /sys/block/hda/size
+Modules linked in: mymod ipv6 autofs4 nls_utf8 cifs lockd sunrpc dm_multipath 
+scsi_dh video output sbs sbshc battery lp sg snd_ens1371 gameport ide_cd_mod 
+snd_rawmidi cdrom snd_ac97_codec ac97_bus snd_seq_dummy snd_seq_oss 
+snd_seq_midi_event snd_seq snd_seq_device snd_pcm_oss snd_mixer_oss 
+parport_pc ac floppy serio_raw snd_pcm button parport rtc_cmos rtc_core 
+rtc_lib snd_timer snd pcnet32 mii soundcore snd_page_alloc i2c_piix4 i2c_core 
+pcspkr dm_snapshot dm_zero dm_mirror dm_region_hash dm_log dm_mod ata_piix 
+libata mptspi mptscsih mptbase scsi_transport_spi sd_mod scsi_mod ext3 jbd 
+uhci_hcd ohci_hcd ehci_hcd [last unloaded: mymod]
+
+Pid: 0, comm: swapper Not tainted (2.6.30.9 #1) VMware Virtual Platform
+EIP: 0060:[<c05dd045>] EFLAGS: 00010206 CPU: 0
+EIP is at netif_receive_skb+0x335/0x377
+EAX: 00316ae1 EBX: deb7d600 ECX: 00316ae1 EDX: e2f357c0
+ESI: 00000008 EDI: de9a4800 EBP: c9403f40 ESP: c9403f10
+ DS: 007b ES: 007b FS: 00d8 GS: 0000 SS: 0068
+Process swapper (pid: 0, ti=c9403000 task=c0737320 task.ti=c0779000)
+Stack:
+ 00316ae1 c07777a0 e2f787c0 00000000 00000001 00000008 00000010 deb7d600
+ c9403f40 deb7d600 00000000 df5acc58 c9403fb0 e0e61db0 00000000 00000010
+ de9a4bb8 de9a4b40 de9a4800 00002000 00000001 00000000 1ea2c822 deb7d600
+Call Trace:
+ [<e0e61db0>] ? pcnet32_poll+0x347/0x66a [pcnet32]
+ [<c041f984>] ? run_rebalance_domains+0x13d/0x3ed
+ [<c05df364>] ? net_rx_action+0x6a/0xf4
+ [<c0429e2a>] ? __do_softirq+0x94/0x138
+ [<c0429d96>] ? __do_softirq+0x0/0x138
+ <IRQ> <0> [<c0429d94>] ? irq_exit+0x29/0x2b
+ [<c040423b>] ? do_IRQ+0x6d/0x83
+ [<c0402e89>] ? common_interrupt+0x29/0x30
+ [<c040828a>] ? default_idle+0x5b/0x92
+ [<c0401a92>] ? cpu_idle+0x3a/0x4e
+ [<c063d84b>] ? rest_init+0x53/0x55
+ [<c077f7df>] ? start_kernel+0x293/0x298
+ [<c077f06a>] ? i386_start_kernel+0x6a/0x6f
+
+d0 89 45 d8 8b 55 d0 8b 42 20 83 e8 20 89 45 d0 8b 4d d0 <8b> 41 20 0f 18 00 
+90 89 c8 83 c0 20 3b 45 d4 75 a4 83 7d d8 00
+
+EIP: [<c05dd045>] netif_receive_skb+0x335/0x377 SS:ESP 0068:c9403f10
+CR2: 0000000000316b01
+---[ end trace 0330855ac41edfb5 ]---
+Kernel panic - not syncing: Fatal exception in interrupt
+Pid: 0, comm: swapper Tainted: G      D    2.6.30.9 #1
+Call Trace:
+ [<c0425ff3>] panic+0x3f/0xdf
+ [<c0405644>] oops_end+0x8c/0x9b
+ [<c041673a>] no_context+0x10c/0x116
+ [<c04168c7>] __bad_area_nosemaphore+0xe0/0xe8
+ [<c0416933>] bad_area_nosemaphore+0xd/0x10
+ [<c0416aa7>] do_page_fault+0xde/0x1e3
+ [<c04169c9>] ? do_page_fault+0x0/0x1e3
+ [<c064f38d>] error_code+0x6d/0x74
+ [<c061007b>] ? tcp_v4_rcv+0x55b/0x600
+ [<c04169c9>] ? do_page_fault+0x0/0x1e3
+ [<c05dd045>] ? netif_receive_skb+0x335/0x377
+ [<e0e61db0>] pcnet32_poll+0x347/0x66a [pcnet32]
+ [<c041f984>] ? run_rebalance_domains+0x13d/0x3ed
+ [<c05df364>] net_rx_action+0x6a/0xf4
+ [<c0429e2a>] __do_softirq+0x94/0x138
+ [<c0429d96>] ? __do_softirq+0x0/0x138
+ <IRQ>  [<c0429d94>] ? irq_exit+0x29/0x2b
+ [<c040423b>] ? do_IRQ+0x6d/0x83
+ [<c0402e89>] ? common_interrupt+0x29/0x30
+ [<c040828a>] ? default_idle+0x5b/0x92
+ [<c0401a92>] ? cpu_idle+0x3a/0x4e
+ [<c063d84b>] ? rest_init+0x53/0x55
+ [<c077f7df>] ? start_kernel+0x293/0x298
+ [<c077f06a>] ? i386_start_kernel+0x6a/0x6f
+\end{lstlisting}
+
+ 
+
+ 
+
+解析Oops的具体含义：
+
+\begin{lstlisting}
+BUG: unable to handle kernel paging request at 00316b01
+IP: [<c05dd045>] netif_receive_skb+0x335/0x377
+*pde = 00000000
+Thread overran stack, or stack corrupted
+Oops: 0000 [#1] SMP
+last sysfs file: /sys/block/hda/size
+Modules linked in: mymod ipv6 autofs4 nls_utf8 cifs lockd sunrpc dm_multipath 
+scsi_dh video output sbs sbshc battery lp sg snd_ens1371 gameport ide_cd_mod 
+snd_rawmidi cdrom snd_ac97_codec ac97_bus snd_seq_dummy snd_seq_oss 
+snd_seq_midi_event snd_seq snd_seq_device snd_pcm_oss snd_mixer_oss 
+parport_pc ac floppy serio_raw snd_pcm button parport rtc_cmos rtc_core 
+rtc_lib snd_timer snd pcnet32 mii soundcore snd_page_alloc i2c_piix4 i2c_core 
+pcspkr dm_snapshot dm_zero dm_mirror dm_region_hash dm_log dm_mod ata_piix 
+libata mptspi mptscsih mptbase scsi_transport_spi sd_mod scsi_mod ext3 jbd 
+uhci_hcd ohci_hcd ehci_hcd [last unloaded: mymod]
+\end{lstlisting}
+
+上面这段这个是载入的模块信息
+
+\begin{lstlisting}
+Pid: 0, comm: swapper Not tainted (2.6.30.9 #1) VMware Virtual Platform
+EIP: 0060:[<c05dd045>] EFLAGS: 00010206 CPU: 0
+EIP is at netif_receive_skb+0x335/0x377
+\end{lstlisting}
+
+EIP这行指明发生Oops的具体位置，我们可以通过这个来找到出现Oops的源代码的具体行。
+
+具体方法如下：
+
+通过使用objdump -S反汇编netif\_receice\_skb所在的目标文件，然后找到偏移量为0x355的行，
+看看这行是有什么代码汇编来的，再结合寄存器的值就能分析这个Oops的原因了。
+
+ 
+
+\begin{lstlisting}
+EAX: 00316ae1 EBX: deb7d600 ECX: 00316ae1 EDX: e2f357c0
+ESI: 00000008 EDI: de9a4800 EBP: c9403f40 ESP: c9403f10
+ DS: 007b ES: 007b FS: 00d8 GS: 0000 SS: 0068
+Process swapper (pid: 0, ti=c9403000 task=c0737320 task.ti=c0779000)
+Stack:
+ 00316ae1 c07777a0 e2f787c0 00000000 00000001 00000008 00000010 deb7d600
+ c9403f40 deb7d600 00000000 df5acc58 c9403fb0 e0e61db0 00000000 00000010
+ de9a4bb8 de9a4b40 de9a4800 00002000 00000001 00000000 1ea2c822 deb7d600
+\end{lstlisting}
+
+上面这段是寄存器和栈的信息。
+
+ 
+
+\begin{lstlisting}
+Call Trace:
+ [<e0e61db0>] ? pcnet32_poll+0x347/0x66a [pcnet32]
+ [<c041f984>] ? run_rebalance_domains+0x13d/0x3ed
+ [<c05df364>] ? net_rx_action+0x6a/0xf4
+ [<c0429e2a>] ? __do_softirq+0x94/0x138
+ [<c0429d96>] ? __do_softirq+0x0/0x138
+ <IRQ> <0> [<c0429d94>] ? irq_exit+0x29/0x2b
+ [<c040423b>] ? do_IRQ+0x6d/0x83
+ [<c0402e89>] ? common_interrupt+0x29/0x30
+ [<c040828a>] ? default_idle+0x5b/0x92
+ [<c0401a92>] ? cpu_idle+0x3a/0x4e
+ [<c063d84b>] ? rest_init+0x53/0x55
+ [<c077f7df>] ? start_kernel+0x293/0x298
+ [<c077f06a>] ? i386_start_kernel+0x6a/0x6f
+\end{lstlisting}
+
+发生Oops的内核栈信息。
+
+ 
+
+\begin{lstlisting}
+Code: 74 14 f0 ff 83 a8 00 00 00 8b 4d d8 89 d8 8b 53 14 57 ff 51 08 58 8b 45 
+d0 89 45 d8 8b 55 d0 8b 42 20 83 e8 20 89 45 d0 8b 4d d0 <8b> 41 20 0f 18 00 
+90 89 c8 83 c0 20 3b 45 d4 75 a4 83 7d d8 00
+EIP: [<c05dd045>] netif_receive_skb+0x335/0x377 SS:ESP 0068:c9403f10
+CR2: 0000000000316b01
+---[ end trace 0330855ac41edfb5 ]---
+Kernel panic - not syncing: Fatal exception in interrupt
+Pid: 0, comm: swapper Tainted: G      D    2.6.30.9 #1
+\end{lstlisting}
+
+如果kernel报告Tainted，说明kernel被损坏了，在"Trainted："后面最多会有10个字符的提示信息来表示具体的信息。每一位上使用一个字母来表示，如下：
+
+\begin{table}[!hbp]
+\caption{Trainted Kernel标志位含义}
+\begin{tabularx}{400pt}{r|X}
+\hline
+第几位 & 含义 \\
+\hline
+1 & 'G': 所有的模块都是GPL的License。如果有模块缺少MODULE\_LICENSE()或者声明是Proprietary的，则为'P'。\\
+2 & 'F': 如果有模块是使用 insmod -f 强制载入的。否则为空。   \\
+3 & 'S': 如果Oops发生在SMP的CPU上，但这个型号的CPU还没有被认为是SMP安全的。\\
+4 & 'R': 如果有模块是使用 rmmod -f 强制卸载的。否则为空。    \\
+5 & 'M': 有CPU报告了Machine Check Exception，否则为空。      \\
+6 & 'B': 如果有page-release函数发现一个错误的page或未知的page标志。  \\
+7 & 'U': 来自用户空间的程序设置的这个标志位。                \\
+8 & 'D': 内核刚刚死掉，比如Oops或者是bug。                   \\
+9 & 'A': ACPI表被覆盖。                                      \\
+10 & 'W': 之前kernel已经产生过警告。                         \\
+\hline
+\end{tabularx}
+\end{table}
+
+Tainted字符串主要的目的是告诉调试器这个kernel已经不是一个干净的kernel了。如果一个模块在加载了之后又卸载了，Tainted仍然会保持。
+
+
+\begin{lstlisting}
+Call Trace:
+ [<c0425ff3>] panic+0x3f/0xdf
+ [<c0405644>] oops_end+0x8c/0x9b
+ [<c041673a>] no_context+0x10c/0x116
+ [<c04168c7>] __bad_area_nosemaphore+0xe0/0xe8
+ [<c0416933>] bad_area_nosemaphore+0xd/0x10
+ [<c0416aa7>] do_page_fault+0xde/0x1e3
+ [<c04169c9>] ? do_page_fault+0x0/0x1e3
+ [<c064f38d>] error_code+0x6d/0x74
+ [<c061007b>] ? tcp_v4_rcv+0x55b/0x600
+ [<c04169c9>] ? do_page_fault+0x0/0x1e3
+ [<c05dd045>] ? netif_receive_skb+0x335/0x377
+ [<e0e61db0>] pcnet32_poll+0x347/0x66a [pcnet32]
+ [<c041f984>] ? run_rebalance_domains+0x13d/0x3ed
+ [<c05df364>] net_rx_action+0x6a/0xf4
+ [<c0429e2a>] __do_softirq+0x94/0x138
+ [<c0429d96>] ? __do_softirq+0x0/0x138
+ <IRQ>  [<c0429d94>] ? irq_exit+0x29/0x2b
+ [<c040423b>] ? do_IRQ+0x6d/0x83
+ [<c0402e89>] ? common_interrupt+0x29/0x30
+ [<c040828a>] ? default_idle+0x5b/0x92
+ [<c0401a92>] ? cpu_idle+0x3a/0x4e
+ [<c063d84b>] ? rest_init+0x53/0x55
+ [<c077f7df>] ? start_kernel+0x293/0x298
+ [<c077f06a>] ? i386_start_kernel+0x6a/0x6f
+\end{lstlisting}
+ 
+
+ 
+
+最后发现一篇调试Oops的专题：
+
+paper on debugging kernel oops or hang　<http://mail.nl.linux.org/kernelnewbies/2003-08/msg00347.html> 虽然是针对2.4的，但还是值得一读。
+
+
+\subsection{使用VMware捕获Linux的串口输出来调试内核的Oops}
+Linux的Kernel在产生Oops后会默认情况下把Oops的相关信息打印在控制台上，只有通过控制台才能看到Oops的信息，而且因为受到控制台行数限制，不能完整的看到Oops的信息，这样对调试Oops很麻烦，一种方法使用虚拟机，把串口输出指定到文件，然后再的Linux的控制台消息重定向到串口，这样可以很方便的捕获串口输出，方便调试Oops。
+
+第一步，在VMware中设置串口输出：
+
+Settings -> Hardware -> Add... 添加一个新的串口设备，指定使用文件输出。
+
+第二步，在Linux中对串口进行重定向。修改 /etc/grub.conf 的kernel 行，在行尾加入如下参数：
+
+\begin{lstlisting}
+console=ttyS0,115200 console=tty0
+\end{lstlisting}
+
+重启，然后测试一下产生一个Oops，看看串口文件，如下，已经有完整的Oops的信息了：
+
+\begin{lstlisting}
+Call Trace:
+0:0:0:0: [sda] Assuming drive cache: write through
+sd 0:0:0:0: [sda] Assuming drive cache: write through
+BUG: unable to handle kernel paging request at 00316b01
+IP: [<c05dd045>] netif_receive_skb+0x335/0x377
+*pde = 00000000
+Thread overran stack, or stack corrupted
+Oops: 0000 [#1] SMP
+last sysfs file: /sys/block/hda/size
+Modules linked in: mymod ipv6 autofs4 nls_utf8 cifs lockd sunrpc 
+dm_multipath scsi_dh video output sbs sbshc battery lp sg snd_ens1371 
+gameport ide_cd_mod snd_rawmidi cdrom snd_ac97_codec ac97_bus 
+snd_seq_dummy snd_seq_oss snd_seq_midi_event snd_seq snd_seq_device 
+snd_pcm_oss snd_mixer_oss parport_pc ac floppy serio_raw snd_pcm 
+button parport rtc_cmos rtc_core rtc_lib snd_timer snd pcnet32 mii 
+soundcore snd_page_alloc i2c_piix4 i2c_core pcspkr dm_snapshot dm_zero
+dm_mirror dm_region_hash dm_log dm_mod ata_piix libata mptspi mptscsih
+mptbase scsi_transport_spi sd_mod scsi_mod ext3 jbd uhci_hcd ohci_hcd 
+ehci_hcd [last unloaded: mymod]
+
+Pid: 0, comm: swapper Not tainted (2.6.30.9 #1) VMware Virtual Platform
+EIP: 0060:[<c05dd045>] EFLAGS: 00010206 CPU: 0
+EIP is at netif_receive_skb+0x335/0x377
+EAX: 00316ae1 EBX: deb7d600 ECX: 00316ae1 EDX: e2f357c0
+ESI: 00000008 EDI: de9a4800 EBP: c9403f40 ESP: c9403f10
+ DS: 007b ES: 007b FS: 00d8 GS: 0000 SS: 0068
+Process swapper (pid: 0, ti=c9403000 task=c0737320 task.ti=c0779000)
+Stack:
+ 00316ae1 c07777a0 e2f787c0 00000000 00000001 00000008 00000010 deb7d600
+ c9403f40 deb7d600 00000000 df5acc58 c9403fb0 e0e61db0 00000000 00000010
+ de9a4bb8 de9a4b40 de9a4800 00002000 00000001 00000000 1ea2c822 deb7d600
+Call Trace:
+ [<e0e61db0>] ? pcnet32_poll+0x347/0x66a [pcnet32]
+ [<c041f984>] ? run_rebalance_domains+0x13d/0x3ed
+ [<c05df364>] ? net_rx_action+0x6a/0xf4
+ [<c0429e2a>] ? __do_softirq+0x94/0x138
+ [<c0429d96>] ? __do_softirq+0x0/0x138
+ <IRQ> <0> [<c0429d94>] ? irq_exit+0x29/0x2b
+ [<c040423b>] ? do_IRQ+0x6d/0x83
+ [<c0402e89>] ? common_interrupt+0x29/0x30
+ [<c040828a>] ? default_idle+0x5b/0x92
+ [<c0401a92>] ? cpu_idle+0x3a/0x4e
+ [<c063d84b>] ? rest_init+0x53/0x55
+ [<c077f7df>] ? start_kernel+0x293/0x298
+ [<c077f06a>] ? i386_start_kernel+0x6a/0x6f
+Code: 74 14 f0 ff 83 a8 00 00 00 8b 4d d8 89 d8 8b 53 14 57 ff 51 08 58 
+8b 45 d0 89 45 d8 8b 55 d0 8b 42 20 83 e8 20 89 45 d0 8b 4d d0 <8b> 41 
+20 0f 18 00 90 89 c8 83 c0 20 3b 45 d4 75 a4 83 7d d8 00
+EIP: [<c05dd045>] netif_receive_skb+0x335/0x377 SS:ESP 0068:c9403f10
+CR2: 0000000000316b01
+---[ end trace 0330855ac41edfb5 ]---
+Kernel panic - not syncing: Fatal exception in interrupt
+Pid: 0, comm: swapper Tainted: G      D    2.6.30.9 #1
+Call Trace:
+ [<c0425ff3>] panic+0x3f/0xdf
+ [<c0405644>] oops_end+0x8c/0x9b
+ [<c041673a>] no_context+0x10c/0x116
+ [<c04168c7>] __bad_area_nosemaphore+0xe0/0xe8
+ [<c0416933>] bad_area_nosemaphore+0xd/0x10
+ [<c0416aa7>] do_page_fault+0xde/0x1e3
+ [<c04169c9>] ? do_page_fault+0x0/0x1e3
+ [<c064f38d>] error_code+0x6d/0x74
+ [<c061007b>] ? tcp_v4_rcv+0x55b/0x600
+ [<c04169c9>] ? do_page_fault+0x0/0x1e3
+ [<c05dd045>] ? netif_receive_skb+0x335/0x377
+ [<e0e61db0>] pcnet32_poll+0x347/0x66a [pcnet32]
+ [<c041f984>] ? run_rebalance_domains+0x13d/0x3ed
+ [<c05df364>] net_rx_action+0x6a/0xf4
+ [<c0429e2a>] __do_softirq+0x94/0x138
+ [<c0429d96>] ? __do_softirq+0x0/0x138
+ <IRQ>  [<c0429d94>] ? irq_exit+0x29/0x2b
+ [<c040423b>] ? do_IRQ+0x6d/0x83
+ [<c0402e89>] ? common_interrupt+0x29/0x30
+ [<c040828a>] ? default_idle+0x5b/0x92
+ [<c0401a92>] ? cpu_idle+0x3a/0x4e
+ [<c063d84b>] ? rest_init+0x53/0x55
+ [<c077f7df>] ? start_kernel+0x293/0x298
+ [<c077f06a>] ? i386_start_kernel+0x6a/0x6f
+\end{lstlisting}
+
+
+\subsection{Kdump}
+\index{kdump}
+
+Kdump是一种调试Linux内核的方法，用于在Linux内核出现Oops之后自动dump内核映像到指定位置的机制，编译我们的事后调试。
+
+Kdump is a new kernel crash dumping mechanism and is very reliable. The crash dump is
+captured from the context of a freshly booted kernel and not from the context of the crashed
+kernel. Kdump uses kexec to boot into a second kernel whenever the system crashes. This
+second kernel, often called a capture kernel, boots with very little memory and captures the
+dump image.
+
+1. Install kexec-tools
+
+\begin{lstlisting}
+yum install kexec-tools
+\end{lstlisting}
+
+2. write kdump config file /etc/kdump.conf with following content.
+
+\begin{lstlisting}
+path /var/crash
+core_collector makedumpfile -d 31 -c
+\end{lstlisting}
+
+3. change /etc/grub.conf append crashkernel=128M@16M to the end of kernel line. example:
+
+\begin{lstlisting}
+default=0
+timeout=5
+splashimage=(hd0,0)/grub/splash.xpm.gz
+hiddenmenu
+title Red Hat Enterprise Linux Server (2.6.18-128.el5)
+        root (hd0,0)
+        kernel /vmlinuz-2.6.18-128.el5 ro root=/dev/mapper/luks-10d5d533-38f6-482c-982d-bfb488adfbed
+ rhgb quiet crashkernel=128M@16M
+        initrd /initrd-2.6.18-128.el5.img
+\end{lstlisting}
+
+4. post config
+
+\begin{lstlisting}
+chkconfig kdump on
+service kdump start
+reboot
+\end{lstlisting}
+
+系统重新启动后，kdump就会生效，之后系统如果再次出现crash，crash文件会存放在\emph{/var/crash/}。
+
+
+\subsection{crash文件的分析}
+
+netdump产生的crash文件可以使用crash来进行分析。
+
+分析方法如下：
+
+\section{总结}
+
+Crash Utility White Paper\cite{crash-white-paper}。
+

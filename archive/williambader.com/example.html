@@ -1,0 +1,300 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+
+<head>
+<title>GCC Bounds Checking</title>
+</head>
+
+<body>
+
+<h2><a name=Example>GCC Bounds Checking Example</a></h2>
+
+<p><code><pre>$ cat example.c
+main() {
+char *malloc(); char *a = malloc(2);
+a[2] = 'x';
+}
+$ ./bgcc -fbounds-checking example.c
+$ ./a.out
+Bounds Checking GCC v gcc-4.0.4-3.2 Copyright (C) 1995 Richard W.M. Jones
+Bounds Checking comes with ABSOLUTELY NO WARRANTY. For details see file
+`COPYING' that should have come with the source to this program.
+Bounds Checking is free software, and you are welcome to redistribute it
+under certain conditions. See the file `COPYING' for details.
+For more information, set GCC_BOUNDS_OPTS to `-help'
+example.c:3:Bounds error: attempt to reference memory overrunning the end of an object.
+example.c:3:  Pointer value: 0x8431002, Size: 1
+example.c:3:  Object `malloc':
+example.c:3:    Address in memory:    0x8431000 .. 0x8431001
+example.c:3:    Size:                 2 bytes
+example.c:3:    Element size:         1 bytes
+example.c:3:    Number of elements:   2
+example.c:3:    Created at:           example.c, line 2
+example.c:3:    Storage class:        heap
+</pre></code>
+
+<h2><a name=Example2>A Longer GCC Bounds Checking Example</a></h2>
+
+<p>
+
+This example shows some additional features:
+<ul>
+<li>Modules compiled with and without bounds checking may be linked together without special preparation.
+  <ul>
+  <li>Checked pointers may be passed to modules compiled without bounds checking.
+  <li>Structures containing pointers may be passed between modules compiled with and without bounds checking.
+  </ul>
+<li>Modules compiled without bounds checking still check some pointer accesses.
+  <ul>
+  <li>Checked pointers (pointers created by <code>malloc</code> or by modules compiled with
+      bounds checking) are checked in calls to the <code>str*</code> and <code>mem*</code>
+      library functions and in calls to modules compiled with bounds checking.
+  <li>The checks are similar to a malloc debug library, except more powerful because they
+      also check local and static variables created in modules compiled with checking.
+  </ul>
+<li>The <code>GCC_BOUNDS_OPTS</code> environment variable passes options to the bounds checker.
+  <ul>
+  <li>The <code>-never-fatal</code> option continues after errors.
+  <li>The <code>-print-heap</code> option shows memory leaks.
+  </ul>
+</ul>
+
+<p><code><pre>$ cat example2.c
+void test(char *p) { p[1] = 'x'; }	/* access a pointer out of range */
+
+static char static_var[1];	/* example static variable */
+
+main() {
+char local_var[1];		/* example stack variable */
+char *heap_var, *malloc();
+struct { char *a; char *b; } s; /* example structure with pointers */
+heap_var = malloc(1);		/* example heap variable */
+test(local_var);		/* access a local variable out of range */
+test(static_var);		/* access a static variable out of range */
+test(heap_var);			/* access a heap variable out of range */
+s.a = local_var;
+s.b = static_var;
+unchecked(&amp;s);			/* pass to a routine in unchecked module */
+}
+$ cat example2u.c
+/* example unchecked module mixed with checked module */
+/*   No special preparation is required, even for */
+/*   structures containing pointers. */
+
+struct s_tag { char *a; char *b; };
+
+void unchecked(struct s_tag *s) {
+memset(s-&gt;a, 0, 2);		/* example of catching checked pointers in */
+memcpy(s-&gt;b, s-&gt;a, 2);		/* library functions even from unchecked code */
+}
+$ gcc -c example2u.c
+$ ./bgcc -fbounds-checking example2.c example2u.o
+$ GCC_BOUNDS_OPTS="-never-fatal -print-heap" ./a.out
+Bounds Checking GCC v gcc-4.0.4-3.2 Copyright (C) 1995 Richard W.M. Jones
+Bounds Checking comes with ABSOLUTELY NO WARRANTY. For details see file
+`COPYING' that should have come with the source to this program.
+Bounds Checking is free software, and you are welcome to redistribute it
+under certain conditions. See the file `COPYING' for details.
+For more information, set GCC_BOUNDS_OPTS to `-help'
+example2.c:1:Bounds error: attempt to reference memory overrunning the end of an object.
+example2.c:1:  Pointer value: 0xbff63f6b, Size: 1
+example2.c:1:  Object `local_var':
+example2.c:1:    Address in memory:    0xbff63f6a .. 0xbff63f6a
+example2.c:1:    Size:                 1 bytes
+example2.c:1:    Element size:         1 bytes
+example2.c:1:    Number of elements:   1
+example2.c:1:    Created at:           example2.c, line 6
+example2.c:1:    Storage class:        stack
+example2.c:1:Bounds error: attempt to reference memory overrunning the end of an object.
+example2.c:1:  Pointer value: 0x80691e9, Size: 1
+example2.c:1:  Object `static_var':
+example2.c:1:    Address in memory:    0x80691e8 .. 0x80691e8
+example2.c:1:    Size:                 1 bytes
+example2.c:1:    Element size:         1 bytes
+example2.c:1:    Number of elements:   1
+example2.c:1:    Created at:           example2.c, line 3
+example2.c:1:    Storage class:        static
+example2.c:1:Bounds error: attempt to reference memory overrunning the end of an object.
+example2.c:1:  Pointer value: 0x8f46001, Size: 1
+example2.c:1:  Object `malloc':
+example2.c:1:    Address in memory:    0x8f46000 .. 0x8f46000
+example2.c:1:    Size:                 1 bytes
+example2.c:1:    Element size:         1 bytes
+example2.c:1:    Number of elements:   1
+example2.c:1:    Created at:           example2.c, line 9
+example2.c:1:    Storage class:        heap
+&lt;unknown&gt;:0:Bounds error: memset with this destination pointer and size 2 would overrun the end of the object's allocated memory.
+&lt;unknown&gt;:0:  Pointer value: 0xbff63f6a
+&lt;unknown&gt;:0:  Object `local_var':
+&lt;unknown&gt;:0:    Address in memory:    0xbff63f6a .. 0xbff63f6a
+&lt;unknown&gt;:0:    Size:                 1 bytes
+&lt;unknown&gt;:0:    Element size:         1 bytes
+&lt;unknown&gt;:0:    Number of elements:   1
+&lt;unknown&gt;:0:    Created at:           example2.c, line 6
+&lt;unknown&gt;:0:    Storage class:        stack
+&lt;unknown&gt;:0:Bounds error: memcpy with this destination pointer and size 2 would overrun the end of the object's allocated memory.
+&lt;unknown&gt;:0:  Pointer value: 0x80691e8
+&lt;unknown&gt;:0:  Object `static_var':
+&lt;unknown&gt;:0:    Address in memory:    0x80691e8 .. 0x80691e8
+&lt;unknown&gt;:0:    Size:                 1 bytes
+&lt;unknown&gt;:0:    Element size:         1 bytes
+&lt;unknown&gt;:0:    Number of elements:   1
+&lt;unknown&gt;:0:    Created at:           example2.c, line 3
+&lt;unknown&gt;:0:    Storage class:        static
+&lt;unknown&gt;:0:Bounds error: memcpy with this source pointer and size 2 would overrun the end of the object's allocated memory.
+&lt;unknown&gt;:0:  Pointer value: 0xbff63f6a
+&lt;unknown&gt;:0:  Object `local_var':
+&lt;unknown&gt;:0:    Address in memory:    0xbff63f6a .. 0xbff63f6a
+&lt;unknown&gt;:0:    Size:                 1 bytes
+&lt;unknown&gt;:0:    Element size:         1 bytes
+&lt;unknown&gt;:0:    Number of elements:   1
+&lt;unknown&gt;:0:    Created at:           example2.c, line 6
+&lt;unknown&gt;:0:    Storage class:        stack
+Bounds library call frequency statistics:
+  Calls to push, pop, param function:        1, 1, 0
+  Calls to add, delete stack:                2, 2
+  Calls to add, delete heap:                 1, 0
+  Calls to check pointer +/- integer:        3
+  Calls to check array references:           0
+  Calls to check pointer differences:        0
+  Calls to check object references:          3
+  Calls to check component references:       0
+  Calls to check truth, falsity of pointers: 0, 0
+  Calls to check &lt;, &gt;, &lt;=, &gt;= of pointers:   0
+  Calls to check ==, != of pointers:         0
+  Calls to check p++, ++p, p--, --p:         0, 0, 0, 0
+  Calls to add, find, delete oob pointers:   0, 0, 0
+  References to unchecked static, stack:     0, 0
+Filename = example2.c, Line = 9, Function = malloc, Count = 1 Avg Size = 1, Total = 1
+</pre></code>
+<h1><a name="download">GCC</a> Bounds Checking Patches</h1>
+
+<h2>
+Download the official bounds checking patches for GCC releases from Haj Ten Brugge on
+<A HREF="https://sourceforge.net/projects/boundschecking/">sourceforge</A>.
+Download bounds checking patches for <A HREF="https://williambader.com/bounds/gcc-4.0.4-bgcc-4.0.4.pat.bz2">gcc-4.0.4</A>.
+<br>
+Download older patches:
+<A HREF="https://williambader.com/bounds/gcc-3.4.6-bgcc-3.4.6.pat.bz2">gcc-3.4.6</A>
+<A HREF="https://williambader.com/bounds/gcc-4.0.2-bgcc-4.0.2.pat.bz2">gcc-4.0.2</A>
+<!--
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-2.95.3-bgcc-2.95.3.pat.bz2">gcc-2.95.3</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.0-bgcc-3.0.pat.bz2">gcc-3.0</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.0.1-bgcc-3.0.1.pat.bz2">gcc-3.0.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.0.2-bgcc-3.0.2.pat.bz2">gcc-3.0.2</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.0.3-bgcc-3.0.3.pat.bz2">gcc-3.0.3</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.0.4-bgcc-3.0.4.pat.bz2">gcc-3.0.4</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.1-bgcc-3.1.pat.bz2">gcc-3.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.1.1-bgcc-3.1.1.pat.bz2">gcc-3.1.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.2-bgcc-3.2.pat.bz2">gcc-3.2</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.2.1-bgcc-3.2.1.pat.bz2">gcc-3.2.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.2.2-bgcc-3.2.2.pat.bz2">gcc-3.2.2</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.2.3-bgcc-3.2.3.pat.bz2">gcc-3.2.3</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.3-bgcc-3.3.pat.bz2">gcc-3.3</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.3.1-bgcc-3.3.1.pat.bz2">gcc-3.3.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.3.2-bgcc-3.3.2.pat.bz2">gcc-3.3.2</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.3.3-bgcc-3.3.3.pat.bz2">gcc-3.3.3</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.4.1-bgcc-3.4.1.pat.bz2">gcc-3.4.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.4.2-bgcc-3.4.2.pat.bz2">gcc-3.4.2</A> 
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.4.3-bgcc-3.4.3.pat.bz2">gcc-3.4.3</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-3.4.6-bgcc-3.4.6.pat.bz2">gcc-3.4.6</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-4.0.1-bgcc-4.0.1.pat.bz2">gcc-4.0.1</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-4.0.2-bgcc-4.0.2.pat.bz2">gcc-4.0.2</A>
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/gcc-4.0.4-bgcc-4.0.4.pat.bz2">gcc-4.0.4</A>
+-->
+</h2>
+
+<p>
+To build a bounds checking gcc:
+<pre><code>
+  cd /u/gnu				# go to a work area
+  tar xzf gcc-x.y.tar.gz		# unpack gcc
+  mv gcc-x.y bgcc-x.y			# rename the gcc directory
+  cd bgcc-x.y				# go to the bgcc directory
+  patch -p1 -T &lt; gcc-x.y-bgcc-x.y.pat	# apply the patches
+  touch gcc/c-parse.in			# force a rebuild of .y and .c
+  mkdir objdir				# make an object file area
+  cd objdir				# enter the area
+  /u/gnu/bgcc-x.y/configure		# initialize the build
+  make bootstrap			# do the build
+</code>
+</pre>
+You can run the bounds checking gcc from its build area using the script
+<code>/u/gnu/bgcc-x.y/gcc/bounds/bgcc</code><br>
+For more build information, see the <a href="https://williambader.com/bounds/README.103">README file</A>.
+<!--
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/">ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/</A>
+//-->
+or the files created by the patches in <code>/u/gnu/bgcc-x.y/gcc/bounds/</code>.
+
+<p>These patches add a <code>-fbounds-checking</code> flag that
+adds bounds checking tests to pointer and array accesses.
+Richard Jones developed the
+<A HREF="http://www-ala.doc.ic.ac.uk/~phjk/BoundsChecking.html">patches against gcc-2.7</A>
+in 1995.
+Herman ten Brugge is the current maintainer and updates patches to the
+<A HREF="https://sourceforge.net/projects/boundschecking/">boundschecking project at sourceforge</A>.
+<a href="https://williambader.com">William Bader</a> has 
+<a href="https://williambader.com/bounds/example.html#download">unofficial updates</a>.
+
+<!--
+<p>A copy of Richard Jones' manual is at
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/bounds-checking-reports.tar.bz2">
+ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/bounds-checking-reports.tar.bz2
+</A>.
+
+<p>A copy of the 2002 paper by Olatunji Ruwase and Monica Lam
+on their C Range Error Detector bounds checking enhancements is at
+<A HREF="ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/cred.pdf">
+ftp://ftp.newspapersystems.com/pub/binaries/boundschecking/cred.pdf
+</A>.
+//-->
+
+<p>You may freely mix object modules compiled with and without bounds checking.
+The bounds checker also includes replacements for
+<code>mem*</code> and <code>str*</code> routines
+and can detect invalid calls against checked memory objects, even from modules
+compiled without bounds checking.
+
+<i><small>
+<p>These patches are unrelated to the fat pointer bounds checking patches by
+Greg McGary <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="5d3a36301d38333a733c2e3e383339733e3230">[email&#160;protected]</a> which change the size of pointers and require
+building modified versions of libc and most other libraries that your program
+calls.  Greg's patches will eventually be incorporated into GCC.
+If you can use Greg's fat pointer bounds checker, it has the advantage of
+better run-time performance and support for languages other than C.
+</small></i>
+
+<i><small>
+<p><b>Valgrind</b> by Julian Seward is another open-source memory debugger for Intel x86-based Linux systems.
+Valgrind runs unmodified ELF x86 Linux executables within a Pentium emulator and detects
+accesses to uninitialized variables, accesses to unallocated memory, and memory leaks.
+In comparison to bounds checking gcc, valgrind has the advantages of detecting accesses to
+uninitialized variables, of not requiring recompilation or relinking, and of supporting C++.
+Valgrind has the disadvantages of working only on x86-based Linux systems and of not detecting
+out-of-bounds array accesses as long as the accesses still produce valid addresses (so it often
+misses off-by-one accesses to local arrays).
+Valgrind has more memory overhead than bounds checking gcc but about the same amount of cpu overhead.
+I regularly use both bounds checking gcc and valgrind.
+<br>
+Valgrind Home
+<a href="http://valgrind.kde.org/">http://valgrind.kde.org/</a>
+<br>
+Valgrind freshmeat project
+<a href="http://freshmeat.net/projects/valgrind/">http://freshmeat.net/projects/valgrind/</a>
+<br>
+Valgrind HowTo
+<a href="http://www.tldp.org/HOWTO/Valgrind-HOWTO/">http://www.tldp.org/HOWTO/Valgrind-HOWTO/</a>
+</small></i>
+
+<hr>
+<address>
+Return to <A HREF="https://gcc.gnu.org/extensions.html">GCC extensions</A>
+<br>
+<small>Last modified
+2007-05-12
+</small>
+</address>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script></body>
+</html>

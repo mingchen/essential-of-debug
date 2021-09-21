@@ -1,0 +1,60 @@
+\chapter{内存问题}
+\section{简介}
+C/C++语言因为没有垃圾回收机制，需要应用程序自身对内存进行管理，
+这就可能导致内存管理的混乱。下面列举一些常见的内存相关的问题：
+
+\begin{itemize}
+\item 访问已经被释放的内存空间；
+\item 释放已经被释放的内存；
+\item 重叠的内存操纵，比如memcpy时源地址和目的地址有重叠的情况
+\end{itemize}
+
+\section{缓冲区溢出}
+
+\emph{缓冲区溢出}\index{缓冲区溢出}(Buffer overflow)~现在被越来越多的人知道了，
+大家都知道它给操作系统及网络安全带来了严重的安全隐患，
+在CERT(http://www.cert.org)中报告的问题中\emph{缓冲区溢出}一直是占有最大的比例。
+
+作为一个程序员，如何编写安全的代码，避免缓冲区溢出，
+提高程序的健壮性是本节的目的。
+
+\subsection{缓冲区溢出的原理}
+\emph{缓冲区溢出}（Buffer overflow）是由于C语言缺乏类型安全引起的，
+
+\subsection{缓冲区溢出的预防}
+
+对C语言来说，在对字符串进行操作时，遵循如下规则:
+
+\begin{itemize}
+\item 使用strncpy代替strcpy
+\item 使用strncat代替strcat
+\item 避免使用puts,scanf
+\end{itemize}
+
+\subsubsection{编写安全的代码}
+
+\subsubsection{使用工具预防缓冲区溢出}
+
+TODO: https://www.cert.org/secure-coding/
+
+
+\section{匿名对象的生命周期}
+
+如下一段代码有一个内存相关的bug：
+
+\begin{lstlisting}[language={C++},numbers=left]
+std::ostringstream oss;
+...
+...
+printf("oss: %s\n", s.str().c_str());
+\end{lstlisting}
+
+\emph{c\_str()} 产生了一个临时临时变量，在 \emph{printf()} 要使用的时候可能已经从栈上消失了，
+程序运行的结果就是可能打印出来的是乱码，因为 \emph{c\_str()} 返回的内存地址已经不是有效的内存地址了。
+
+Book: Thinking in C++
+
+
+\section{调试内存问题的工具}
+
+TODO
