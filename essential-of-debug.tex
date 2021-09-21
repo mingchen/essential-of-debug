@@ -8,7 +8,7 @@
 %  or https://github.com/CTeX-org/ctex-kit/
 
 % \documentclass[winfonts,UTF8,cs4size,a4paper,fntef]{ctexart}
-\documentclass[fontset=windows,UTF8,zihao=-4,a4paper,openright]{ctexbook}
+\documentclass[fontset=windows,UTF8,zihao=-4,a4paper]{ctexbook}
 
 \usepackage{iftex}
 
@@ -37,6 +37,8 @@
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\gdbcmd}[1]{\texttt{#1}}
 \newcommand{\gdbcmdparam}[1]{\textit{#1}}
+
+\usepackage{geometry}
 
 \usepackage{xeCJKfntef}
 \usepackage[dvips]{graphicx}
@@ -74,6 +76,9 @@
 %\addtolength{\voffset}{-1cm}
 %\addtolength{\hoffset}{-0.5cm}
 %\addtolength{\textwidth}{1cm}
+
+% 使用 geometry 的宏设置页面边距
+\geometry{a4paper,left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
 
 \begin{document}
 
