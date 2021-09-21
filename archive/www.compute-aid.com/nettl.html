@@ -1,0 +1,218 @@
+<HTML>
+<HEAD><STYLE TYPE="text/css">
+{font-family="Arial"}
+</STYLE>
+<TITLE>How to take a Network Trace on HP-UX</TITLE>
+</HEAD>
+<BODY BGCOLOR="#FFFFFF">
+
+<H1> HOW TO TAKE A NETWORK TRACE ON HP-UX:</H1>
+Page Updated 7/6/2000 
+<P>Comments or suggestions to <A HREF="mailto:hackley@atl.hp.com">Brian Hackley</A>
+<HR>
+<H4>
+<A HREF="#1"> Step 1: Begin Lan Tracing to a Raw Trace File</A><BR>
+<A HREF="#2"> Step 2: Reproduce the Network "Event" or Error Condition</A><BR>
+<A HREF="#3"> Step 3: Stop Tracing to the Raw Trace File As Soon As Possible</A><BR>
+<A HREF="#4"> Step 4:  Format the Raw LAN Trace So You Can Read It</A> choose one of these methods:<BR>
+........4.1:<A HREF="#4A"> To create 1-liner trace analysis file of all packets</A><BR>
+........4.2:<A HREF="#4B"> To create a 1-liner trace analysis file using a packet filter</A><BR>
+........4.3:<A HREF="#4C"> To create detailed trace analysis of all packets</A><BR>
+........4.4: <A HREF="#4D"> To create a detailed trace analysis file using a packet filter</A><BR>
+<A HREF="#5"> Step 5:  How to create a filter file so you only see "Interesting" packets</A><BR>
+........5.1:<A HREF="#5.1"> Filter based on IP Address</A><BR>
+........5.1:<A HREF="#5.2">  Filter based on Ethernet Address</A><BR>
+........5.1:<A HREF="#5.3">  Filter based on UDP Port (example: NFS)</A><BR>
+........5.1:<A HREF="#5.4">  Filter based on TCP Port (example: telnet</A><BR>
+<A HREF="#MOREFILTERS"> More detail on Filters</A><BR>
+<A HREF="#ONTHEFLY"> How to Run nettl+netfmt to Observe Packets "On the Fly"</A><BR>
+<A HREF="#UUENCODE"> Uuencoding a raw Nettl Trace File to Email to HP Network Support:</A><BR>
+</H4>
+<HR>
+<A NAME="1" /A>
+<H2>Step 1:  Begin LAN Tracing to a Raw Trace File:</H2>
+# <B><T>nettl -tn 0x30800000 -e <I><u>ns_ls_ip</I></U> -size 1024 -tracemax 99999 -f /tmp/raw0</B></T>
+<BR><BR>
+This will trace packets in, packets out, and loopback packets at the IP Layer (ns_ls_ip).<BR>
+<BR>
+<B>If you need link-specific packet tracing you must specify the appropriate network <U>driver</U> or "-e all":</B><BR><BR>
+For tracing on a built-in 10Base* <B>ETHERNET</B>, use <B>'-e ns_ls_driver'</B><BR>
+For <B>ATM</B>, use <B>'-e atm'</B> or '-e all'<BR>
+For <B>Classic X.25 Level 2</B> use <B>'-e x25l2 -c x25_0'</B><BR> 
+For <B>Classic X.25 Level 3</B> use <B>'-e x25l3 -c x25_0'</B><BR> 
+For <B>Streams X.25 Level 2</B> use <B>'-e sx25l2 -c x25_0'</B><BR> 
+For <B>Streams X.25 Level 3</B> use <B>'-e sx25l3 -c x25_0'</B><BR> 
+For <B>100BaseT</B>, use the specific 100BT driver for your system or '-e all'<BR>
+For <B>S800 HP-PB 100BaseT</B> use <B>'-e lan100'</B>.<BR>
+For <B>S800 HSC 100BaseT</B> use <B>'-e GSC100BT'.</B> <BR> 
+For <B>A,B,C,J Built-in 10/100BaseT</B> use <B>'-e base100'</B>.<BR>
+For <B>PCI (non SPP) 100BT</B> use <B>'-e PCI100BT'.</B><BR>
+For <B>N,V Class SPP 100BT</B> use <B>'-e SPP100BT'.</B><BR>
+For <B>A,L,N Class Dual PCI + SCSI-2 card</B> use <B>'-e BASE100BT'.</B><BR>
+For <B>EISA 100BaseT</B> use <B>'=e EISA100BT'.</B><BR>
+For <B>GIGABIT</B> use <b>'-e GELAN'.</B><BR>
+FOR <B>APA</B> use <b>' -e APAPORT'.</B><BR>
+For <B>HP-PB TOKEN RING,</B> use <B>'-e TOKEN'</B> or '-e all'<BR>
+For <B>PCI TOKEN RING,</B> use <B>'-e PCITR'</B> or '-e all'<BR>
+For <B>HP-PB FDDI</B> ring, use <B>'-e FDDI'</B> or '-e all'<BR>
+For <B>PCI FDDI</B> ring, use <B>'-e PCI_FDDI'</B> or '-e all'<BR>
+For <B>HSC FDDI</B> ring, use <B>'-e HSC_FDDI'</B> or '-e all'<BR>
+For <B>EISA FDDI</B> ring, use <B>'-e EISA FDDI'</B> or '-e all'<BR>
+Check with the <B><I>nettl -status</B></I> command to find out which LAN driver you need to trace.<BR>
+<B>Note 1:</B>  -c specifies which X.25 card on the system<BR>
+<B>Note 2:</B> specify '-e all' if you have no idea what network card the system has. You can specify multiple drivers e.g. '-e FDDI lan100'.<BR>
+<B>Note 3:</B> specifying '-e all' will result in multiple layers tracing the packets (e.g. driver, IP, TCP etc.)<BR>
+<B>Note 4: ACC</B> ACC only uses nettl LOGGING, the is no builtin trace utility for ACC.
+There is an ADD-ON ACC product called X.25 Protocol Analyzer that
+utilizes 2 of the ACC ports to "eavesdrop" on a port, and produces a
+"datascope" type output.  You must purchase the X.25 Protocol Analyzer product
+in order to use it.<BR> 
+<HR>
+<A NAME="2" /A>
+<H2>Step 2:  Reproduce the Network "Event" or Error Condition</H2>
+<HR>
+<A NAME="3" /A>
+<H2>Step 3:  Stop Tracing to the Raw Trace File As Soon As Possible</H2>
+# <B><I>nettl -tf -e all</B></I>
+<HR>
+<A NAME="4" /A>
+<H2>Step 4:  Format the Raw LAN Trace So You Can Read It</H2>
+You can either do a "1-liner" trace for each packet, or you can do a detailed trace format.<BR>
+<BR>
+If tracing 100BaseT, ATM, TokenRing, FDDI, etc. you must format the 
+trace on a system with the link product installed!<BR>
+<BR>
+In either case, you can create a "filter file" to narrow down the 
+packets being analyzed. <BR>
+<BR>
+<A HREF="5">Step 5</A> discusses packet filter files.<BR>
+<BR>
+Please note the most recent packets will be in the /tmp/raw0.TRC0 and 
+older packets will be in /tmp/raw0.TRC1.  The trace files "wrap 
+around" and fill up VERY quickly.  It may take you several
+ attempts to trap the network event in the raw trace file.<BR><BR>
+
+<A NAME="4A" /A>
+<H3>Step 4.1: To create 1-liner trace analysis file of all packets in capture file:</H3>
+
+# <B><I>netfmt -N -n -l -1 -f /tmp/raw0.TRC0 > /tmp/fmt-10</B></I>
+
+<A NAME="4B" /A>
+<H3>Step 4.2: To create a 1-liner trace analysis file using a packet filter:</H3>
+See information in Step #5 on creating a filter file.<BR>
+<BR>
+# <B><I>netfmt -N -n -l -1 -c /tmp/filterfile -f /tmp/raw0.TRC0 > /tmp/fmt-10</B></I>
+
+<A NAME="4C" /A>
+<H3>Step 4.3: To create detailed trace analysis of all packets in capture file:</H3>
+
+# <B><I>netfmt -N -n -l -f /tmp/raw0.TRC0 > /tmp/fmt0</B></I>
+
+<A NAME="4D" /A>
+<H3>Step 4.4: To create a detailed trace analysis file using a packet filter:</H3>
+
+See information in Step #5 on creating a filter file.<BR>
+<BR>
+# <B><I>netfmt -N -n -l -c /tmp/filterfile -f /tmp/raw0.TRC0 > /tmp/fmt-10</B></I>
+
+<HR>
+<A NAME="5" /A>
+<H2>Step 5:  How to create a filter file so you only see "Interesting" packets:</H2>
+
+Here are some example filter files.  Be careful, nettl matches on the first filter
+element!
+
+<A NAME="5.1" /A>
+<H3>EXAMPLE 5.1:  To view packets sent to and received from an IP address by
+	      the host running the nettl trace:</H3>
+filter ip_saddr 192.6.2.1<BR>
+filter ip_daddr 192.6.2.1
+
+<A NAME="5.2" /A>
+<H3>EXAMPLE 5.2:  To view packets sent to and received from an Ethernet address by
+	      the host running the nettl trace:</H3>
+filter source   08-00-09-00-12-3c<BR>
+filter dest     08-00-09-00-12-3c
+
+<A NAME="5.3" /A>
+<H3>EXAMPLE 5.3:  To see NFS packets sent to and from the host doing trace: </H3>
+filter udp_sport 2049  /* UDP port 2049 = nfsd */<BR>
+filter udp_dport 2049  /* UDP port 2049 = nfsd */
+
+<A NAME="5.4" /A>
+<H3>EXAMPLE 5.4:  To see only telnet packets sent to and from the host doing
+	      the trace:</H3>
+filter tcp_sport 23    /* TCP port 23 = telnet */<BR>
+filter tcp_dport 23    /* TCP port 23 = telent */
+
+<BR>
+<A NAME="MOREFILTERS" /A>
+<H4>The following (taken from the netfmt man page) may also help:</H4>
+________________________________________________________________<BR>
+Layer 1<BR>
+<B>dest</B>          hardware destination address<BR>
+<B>source</B>        hardware source address<BR>
+<B>interface</B>     software network interface<BR>
+_________________________________________________________________<BR>
+Layer 2<BR>
+<B>ssap</B>          IEEE802.2 source sap<BR>
+<B>dsap</B>          IEEE802.2 destination sap<BR>
+<B>type</B>          Ethernet type<BR>
+_________________________________________________________________<BR>
+Layer 3<BR>
+<B>ip_saddr</B>      IP source address<BR>
+<B>ip_daddr</B>      IP destination address<BR>
+_________________________________________________________________<BR>
+Layer 4<BR>
+<B>tcp_sport</B>     TCP source port<BR>
+<B>tcp_dport</B>     TCP destination port<BR>
+<B>udp_sport</B>     UDP source port<BR>
+<B>udp_dport</B>     UDP destination port<BR>
+<B>connection</B>    a level 4 (TCP, UDP, PXP) connection<BR>
+_________________________________________________________________<BR>
+Layer 5<BR>
+<B>rpcprogram</B>     RPC program<BR>
+<B>rpcprocedure</B>   RPC procedure<BR>
+<B>rpcdirection</B>   RPC call or reply<BR>
+<HR>
+<A NAME="ONTHEFLY" /A>
+<H2>How to Run nettl+netfmt to Observe Packets "On the Fly":</H2>
+
+This is an interactive trace that displays the trace file on the screen,
+and tee's the output to a file.  Make sure you make a specific filterfile first,
+and specify the appropriate driver in the -e parameter:<BR>
+<BR>
+# <B><I>nettl -tn 0x30800000 -e ns_ls_driver | netfmt -F -N -n -l -c filterfile | tee /tmp/fmt0
+</B></I>
+<BR>
+Don't forget your filterfile.  Here is an example:<BR>
+<BR>
+filter ip_saddr 192.9.9.1<BR>
+filter ip_daddr 192.9.9.1<BR>
+<BR>
+To stop the trace:<BR>
+<BR>
+<B><I>CTRL/C</B></I> the nettl command you started above, then<BR>
+# <B><I>nettl -tf -e all</B></I> <BR>
+<BR> 
+The formatted trace file will be in the /tmp/fmt0 file.  There will be not be any
+raw file produced.
+<HR>
+<A NAME="UUENCODE">
+<H2>Uuencoding a raw Nettl Trace File to Email to HP Network Support:</H2>
+
+uuencoding a raw nettl trace file is needed before sending
+the file via email.  Here is an example command to do this:<BR>
+<BR>
+<B><I>
+uuencode /tmp/raw0.TRC0 raw0.TRC0 > /tmp/raw0.TRC0.uu</B></I><BR>
+<BR>
+Email the /tmp/raw0.TRC0.uu file to the address given
+to you by the HP Network Support Engineer.<BR>
+<BR>
+Note that you do not need to uuencode the raw file if you FTP it using
+binary mode to an FTP site specified by your HP Support Engineer!
+
+<HR>
+
+</body></html>
